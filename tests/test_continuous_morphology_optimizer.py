@@ -89,3 +89,23 @@ def test_optimize_morphology_cli_writes_json(tmp_path):
     assert payload["schema_version"] == 1
     assert payload["optimization_type"] == "continuous_grid_search"
     assert payload["best_design"]["success_rate"] == 1.0
+
+
+def test_optimize_morphology_can_apply_singularity_constraints():
+    result = optimize_morphology(
+        objects=("cube",),
+        tasks=("tabletop_easy",),
+        upper_scales=(0.85, 1.0),
+        forearm_scales=(0.85,),
+        wrist_scales=(0.85,),
+        base_x_values=(0.0,),
+        minimum_reach_margin=0.03,
+        minimum_sigma=0.2,
+        maximum_condition_number=10.0,
+    )
+
+    assert result["singularity_constraints"] == {
+        "minimum_sigma": 0.2,
+        "maximum_condition_number": 10.0,
+    }
+    assert all("singularity_passed" in row for row in result["design_summaries"])

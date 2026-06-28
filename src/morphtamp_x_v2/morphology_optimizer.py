@@ -39,18 +39,45 @@ def _evaluate_design(
     *,
     minimum_reach_margin: float,
     path_cost_weight: float,
+    minimum_sigma: float | None,
+    maximum_condition_number: float | None,
 ) -> dict[str, Any]:
     rows = []
+    sigma_values: list[float] = []
+    condition_values: list[float] = []
     for row in base_rows:
         demand = _workspace_demand(row)
         reach_margin = design.reach_proxy - demand
+        joint_metrics = row.get("joint_metrics") or {}
+        sigma = joint_metrics.get("min_sigma")
+        condition = joint_metrics.get("max_condition_number")
+        if sigma is not None:
+            sigma_values.append(float(sigma))
+        if condition is not None:
+            condition_values.append(float(condition))
+        sigma_passed = minimum_sigma is None or sigma is None or float(sigma) >= minimum_sigma
+        condition_passed = (
+            maximum_condition_number is None
+            or condition is None
+            or float(condition) <= maximum_condition_number
+        )
+        singularity_passed = sigma_passed and condition_passed
         base_success = bool(row["success"]) and (
             row.get("joint_metrics") is None or bool(row["joint_metrics"]["success"])
         )
-        success = base_success and reach_margin >= minimum_reach_margin
+        success = base_success and reach_margin >= minimum_reach_margin and singularity_passed
         failure_reasons = list(row.get("failure_reasons", ()))
         if not success and reach_margin < minimum_reach_margin:
             failure_reasons.append(f"reach_margin:{reach_margin:.6f}")
+        if not singularity_passed:
+            if minimum_sigma is not None and sigma is not None and float(sigma) < minimum_sigma:
+                failure_reasons.append(f"sigma_min:{float(sigma):.6f}")
+            if (
+                maximum_condition_number is not None
+                and condition is not None
+                and float(condition) > maximum_condition_number
+            ):
+                failure_reasons.append(f"condition_number:{float(condition):.6f}")
         rows.append(
             {
                 "object_type": row["object_type"],
@@ -59,6 +86,9 @@ def _evaluate_design(
                 "path_length": row["path_length"],
                 "workspace_demand": demand,
                 "reach_margin": reach_margin,
+                "min_sigma": sigma,
+                "max_condition_number": condition,
+                "singularity_passed": singularity_passed,
                 "failure_reasons": failure_reasons,
             }
         )
@@ -78,6 +108,9 @@ def _evaluate_design(
         "objective": objective,
         "mean_path_length": mean_path,
         "minimum_reach_margin": min(float(row["reach_margin"]) for row in rows) if rows else 0.0,
+        "minimum_sigma": None if not sigma_values else min(sigma_values),
+        "maximum_condition_number": None if not condition_values else max(condition_values),
+        "singularity_passed": all(bool(row["singularity_passed"]) for row in rows),
         "results": rows,
     }
 
@@ -97,6 +130,8 @@ def optimize_morphology(
     full_candidate_limit: int = 2,
     minimum_reach_margin: float = 0.03,
     path_cost_weight: float = 0.02,
+    minimum_sigma: float | None = None,
+    maximum_condition_number: float | None = None,
 ) -> dict[str, Any]:
     base_rows = [
         _run_static_case(
@@ -125,6 +160,8 @@ def optimize_morphology(
             base_rows,
             minimum_reach_margin=minimum_reach_margin,
             path_cost_weight=path_cost_weight,
+            minimum_sigma=minimum_sigma,
+            maximum_condition_number=maximum_condition_number,
         )
         for design in candidates
     ]
@@ -138,6 +175,10 @@ def optimize_morphology(
         "total_candidates": len(summaries),
         "feasible_candidates": len(feasible),
         "minimum_reach_margin": minimum_reach_margin,
+        "singularity_constraints": {
+            "minimum_sigma": minimum_sigma,
+            "maximum_condition_number": maximum_condition_number,
+        },
         "path_cost_weight": path_cost_weight,
         "best_design": best,
         "pareto_designs": pareto_designs(summaries),

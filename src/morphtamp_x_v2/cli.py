@@ -159,6 +159,8 @@ def parser() -> argparse.ArgumentParser:
     optimize.add_argument("--base-y-values", nargs="+", type=float, default=[0.0])
     optimize.add_argument("--minimum-reach-margin", type=float, default=0.03)
     optimize.add_argument("--path-cost-weight", type=float, default=0.02)
+    optimize.add_argument("--minimum-sigma", type=float)
+    optimize.add_argument("--maximum-condition-number", type=float)
     optimize.add_argument("--output", type=Path, required=True)
 
     robust = sub.add_parser("robustness-benchmark")
@@ -179,6 +181,11 @@ def parser() -> argparse.ArgumentParser:
     failure.add_argument("--input", type=Path, required=True)
     failure.add_argument("--output-json", type=Path, required=True)
     failure.add_argument("--output-md", type=Path)
+
+    design_analysis = sub.add_parser("design-analysis")
+    design_analysis.add_argument("--input", type=Path, required=True)
+    design_analysis.add_argument("--output-json", type=Path, required=True)
+    design_analysis.add_argument("--output-md", type=Path)
 
     visualize = sub.add_parser("visualize-results")
     visualize.add_argument("--benchmark", type=Path, required=True)
@@ -691,6 +698,8 @@ def main(argv: list[str] | None = None) -> int:
             full_candidate_limit=args.full_candidate_limit,
             minimum_reach_margin=args.minimum_reach_margin,
             path_cost_weight=args.path_cost_weight,
+            minimum_sigma=args.minimum_sigma,
+            maximum_condition_number=args.maximum_condition_number,
         )
         payload["protocol"] = protocol_payload
         _write_json(payload, args.output)
@@ -737,6 +746,21 @@ def main(argv: list[str] | None = None) -> int:
             args.output_md.parent.mkdir(parents=True, exist_ok=True)
             args.output_md.write_text(payload["markdown"], encoding="utf-8")
         print(f"failure-analysis: failed={payload['failed_runs']} output={args.output_json}")
+        return 0
+    if args.command == "design-analysis":
+        from .design_analysis import build_design_analysis
+
+        payload = build_design_analysis(json.loads(args.input.read_text(encoding="utf-8")))
+        _write_json(payload, args.output_json)
+        if args.output_md is not None:
+            args.output_md.parent.mkdir(parents=True, exist_ok=True)
+            args.output_md.write_text(payload["markdown"], encoding="utf-8")
+        recommendation = payload["recommendation"]["recommended_design"]
+        print(
+            "design-analysis: "
+            f"recommended={None if recommendation is None else recommendation['arm_design']} "
+            f"output={args.output_json}"
+        )
         return 0
     if args.command == "visualize-results":
         manifest = visualize_results(args.benchmark, args.morphology, args.output_dir)

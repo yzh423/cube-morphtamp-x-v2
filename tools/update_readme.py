@@ -84,6 +84,7 @@ def _cli_command_table() -> str:
         "optimize-morphology": "search continuous morphology scales for lowest feasible cost",
         "robustness-benchmark": "evaluate seed/pose perturbation robustness",
         "failure-analysis": "summarize failed cases by design, object, task, and reason",
+        "design-analysis": "generate Pareto, segment-importance, and recommendation reports",
         "visualize-results": "generate benchmark and morphology figures",
     }
     rows = [
@@ -330,8 +331,19 @@ python -m morphtamp_x_v2.cli optimize-morphology \\
   --scale-values 0.82 0.90 1.00 1.10 \\
   --base-x-values 0.00 0.03 0.05 \\
   --minimum-reach-margin 0.03 \\
+  --minimum-sigma 0.08 \\
+  --maximum-condition-number 30 \\
   --path-cost-weight 0.02 \\
   --output results/current_continuous_morphology.json
+```
+
+Analyze the resulting design trade-offs:
+
+```bash
+python -m morphtamp_x_v2.cli design-analysis \\
+  --input results/current_continuous_morphology.json \\
+  --output-json results/current_design_analysis.json \\
+  --output-md results/current_design_analysis.md
 ```
 
 ## Robustness benchmark

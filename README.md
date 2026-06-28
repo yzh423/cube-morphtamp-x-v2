@@ -95,6 +95,7 @@ python -m morphtamp_x_v2.cli check-tasks
 | `build-scene` | write a MuJoCo Panda/object/task scene XML |
 | `check-tasks` | validate object/task library geometry |
 | `compare-grasps` | rank grasp candidates and generate per-candidate replays |
+| `design-analysis` | generate Pareto, segment-importance, and recommendation reports |
 | `failure-analysis` | summarize failed cases by design, object, task, and reason |
 | `list-objects` | print available object types |
 | `list-tasks` | print available task types |
@@ -251,8 +252,19 @@ python -m morphtamp_x_v2.cli optimize-morphology \
   --scale-values 0.82 0.90 1.00 1.10 \
   --base-x-values 0.00 0.03 0.05 \
   --minimum-reach-margin 0.03 \
+  --minimum-sigma 0.08 \
+  --maximum-condition-number 30 \
   --path-cost-weight 0.02 \
   --output results/current_continuous_morphology.json
+```
+
+Analyze the resulting design trade-offs:
+
+```bash
+python -m morphtamp_x_v2.cli design-analysis \
+  --input results/current_continuous_morphology.json \
+  --output-json results/current_design_analysis.json \
+  --output-md results/current_design_analysis.md
 ```
 
 ## Robustness benchmark
