@@ -27,6 +27,17 @@ Evidence scope: this is a research prototype for reachability, kinematic
 feasibility, grasp-candidate selection, collision-aware replay, and morphology
 cost comparison. It is not yet a full force-controlled contact manipulation stack.
 
+## Simulation snapshots
+
+These screenshots are generated from MuJoCo replay scenes with the Franka/Panda
+model and object-specific grasp planning. Regenerate them with
+`python tools/render_readme_screenshots.py --panda-xml ~/robocasa/mujoco_menagerie/franka_emika_panda/scene.xml`.
+
+| Cube over barrier | Sphere folded transfer | Plate shelf place |
+|---|---|---|
+| ![Cube transfer over a solid obstacle](docs/assets/readme/cube_over_barrier.png) | ![Sphere folded transfer task](docs/assets/readme/sphere_folded_transfer.png) | ![Plate shelf placement task](docs/assets/readme/plate_shelf_place.png) |
+| Solid-obstacle transfer with selected Panda replay. | Folded arm posture while carrying a sphere. | Object-specific grasp selection for plate-style placement. |
+
 ## Environment
 
 From WSL:
