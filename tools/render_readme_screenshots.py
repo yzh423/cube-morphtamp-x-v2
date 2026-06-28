@@ -126,10 +126,10 @@ def _render_replay_frame(
     # A stable three-quarter view that keeps the table, obstacle/object, and
     # Panda arm visible across the README showcase tasks.
     object_position = np.asarray(frame["object_position"], dtype=float)
-    camera.lookat[:] = np.asarray([0.10, 0.00, max(0.45, object_position[2])], dtype=float)
-    camera.distance = 1.65
-    camera.azimuth = 145.0
-    camera.elevation = -20.0
+    camera.lookat[:] = np.asarray([0.11, 0.00, max(0.43, object_position[2])], dtype=float)
+    camera.distance = 1.48
+    camera.azimuth = 150.0
+    camera.elevation = -14.0
 
     renderer.update_scene(data, camera=camera)
     image = renderer.render()
