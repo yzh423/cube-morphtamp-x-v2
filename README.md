@@ -95,10 +95,13 @@ python -m morphtamp_x_v2.cli check-tasks
 | `build-scene` | write a MuJoCo Panda/object/task scene XML |
 | `check-tasks` | validate object/task library geometry |
 | `compare-grasps` | rank grasp candidates and generate per-candidate replays |
+| `failure-analysis` | summarize failed cases by design, object, task, and reason |
 | `list-objects` | print available object types |
 | `list-tasks` | print available task types |
 | `morphology-benchmark` | evaluate morphology designs over object/task cases |
+| `optimize-morphology` | search continuous morphology scales for lowest feasible cost |
 | `plan` | generate symbolic pick-place phases |
+| `robustness-benchmark` | evaluate seed/pose perturbation robustness |
 | `run` | select a grasp, build scene, solve Panda replay, and write replay JSON |
 | `validate-physics` | run replay-level physics validation |
 | `view` | open or report a generated replay |
@@ -199,6 +202,7 @@ Object/task browser keys:
 
 ```bash
 python -m morphtamp_x_v2.cli benchmark \
+  --protocol fixed \
   --objects cube sphere cylinder plate mug_proxy bowl_proxy \
   --tasks tabletop_easy over_barrier narrow_slot shelf_pick shelf_place folded_transfer \
   --panda-xml ~/robocasa/mujoco_menagerie/franka_emika_panda/scene.xml \
@@ -226,6 +230,7 @@ Use held-out tasks only after tuning decisions are frozen.
 
 ```bash
 python -m morphtamp_x_v2.cli morphology-benchmark \
+  --protocol fixed \
   --objects cube sphere cylinder plate mug_proxy bowl_proxy \
   --tasks tabletop_easy over_barrier narrow_slot shelf_pick shelf_place folded_transfer \
   --panda-xml ~/robocasa/mujoco_menagerie/franka_emika_panda/scene.xml \
@@ -233,6 +238,48 @@ python -m morphtamp_x_v2.cli morphology-benchmark \
   --position-tolerance 0.05 \
   --full-candidate-limit 2 \
   --output results/current_morphology_benchmark.json
+```
+
+## Continuous morphology optimization
+
+Use this when you want to move beyond the preset design list and search over
+segment scales and base placement while enforcing a robust reach margin:
+
+```bash
+python -m morphtamp_x_v2.cli optimize-morphology \
+  --protocol fixed \
+  --scale-values 0.82 0.90 1.00 1.10 \
+  --base-x-values 0.00 0.03 0.05 \
+  --minimum-reach-margin 0.03 \
+  --path-cost-weight 0.02 \
+  --output results/current_continuous_morphology.json
+```
+
+## Robustness benchmark
+
+Use this after a fixed benchmark passes to test whether the result survives
+small pose and obstacle perturbations:
+
+```bash
+python -m morphtamp_x_v2.cli robustness-benchmark \
+  --protocol fixed \
+  --trials 10 \
+  --seed 42 \
+  --position-noise 0.01 \
+  --obstacle-noise 0.01 \
+  --output results/current_robustness.json
+```
+
+## Failure analysis
+
+Turn any benchmark-like JSON containing a `results` list into a compact failure
+taxonomy:
+
+```bash
+python -m morphtamp_x_v2.cli failure-analysis \
+  --input results/current_morphology_benchmark.json \
+  --output-json results/current_failure_analysis.json \
+  --output-md results/current_failure_analysis.md
 ```
 
 ## Figures

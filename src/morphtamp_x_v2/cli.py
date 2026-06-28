@@ -27,6 +27,7 @@ from .result_visualization import visualize_results
 from .scene_builder import build_pick_place_scene
 from .objects import OBJECT_TYPES
 from .objects import object_spec
+from .protocols import PROTOCOL_TYPES, resolve_protocol_inputs
 from .task_health import check_all_tasks
 from .tasks import TASK_TYPES, make_scenario, task_spec
 from .validator import evaluate_replay
@@ -92,8 +93,9 @@ def parser() -> argparse.ArgumentParser:
     validate.add_argument("--output", type=Path)
 
     benchmark = sub.add_parser("benchmark")
-    benchmark.add_argument("--objects", nargs="+", choices=OBJECT_TYPES, default=list(OBJECT_TYPES))
-    benchmark.add_argument("--tasks", nargs="+", choices=TASK_TYPES, default=list(TASK_TYPES))
+    benchmark.add_argument("--protocol", choices=PROTOCOL_TYPES)
+    benchmark.add_argument("--objects", nargs="+", choices=OBJECT_TYPES)
+    benchmark.add_argument("--tasks", nargs="+", choices=TASK_TYPES)
     benchmark.add_argument("--panda-xml", type=Path)
     benchmark.add_argument("--auto-fit-panda", action="store_true")
     benchmark.add_argument("--full-candidate-limit", type=int, default=2)
@@ -121,9 +123,10 @@ def parser() -> argparse.ArgumentParser:
     analysis.add_argument("--output-md", type=Path)
 
     morph = sub.add_parser("morphology-benchmark")
+    morph.add_argument("--protocol", choices=PROTOCOL_TYPES)
     morph.add_argument("--arm-designs", nargs="+", choices=ARM_DESIGN_TYPES, default=list(ARM_DESIGN_TYPES))
-    morph.add_argument("--objects", nargs="+", choices=OBJECT_TYPES, default=list(OBJECT_TYPES))
-    morph.add_argument("--tasks", nargs="+", choices=TASK_TYPES, default=list(TASK_TYPES))
+    morph.add_argument("--objects", nargs="+", choices=OBJECT_TYPES)
+    morph.add_argument("--tasks", nargs="+", choices=TASK_TYPES)
     morph.add_argument("--panda-xml", type=Path)
     morph.add_argument("--auto-fit-panda", action="store_true")
     morph.add_argument("--full-candidate-limit", type=int, default=2)
@@ -139,6 +142,43 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     morph.add_argument("--output", type=Path, required=True)
+
+    optimize = sub.add_parser("optimize-morphology")
+    optimize.add_argument("--protocol", choices=PROTOCOL_TYPES)
+    optimize.add_argument("--objects", nargs="+", choices=OBJECT_TYPES)
+    optimize.add_argument("--tasks", nargs="+", choices=TASK_TYPES)
+    optimize.add_argument("--panda-xml", type=Path)
+    optimize.add_argument("--auto-fit-panda", action="store_true")
+    optimize.add_argument("--full-candidate-limit", type=int, default=2)
+    optimize.add_argument("--position-tolerance", type=float, default=0.05)
+    optimize.add_argument("--scale-values", nargs="+", type=float, default=[0.82, 0.9, 1.0, 1.1])
+    optimize.add_argument("--upper-scales", nargs="+", type=float)
+    optimize.add_argument("--forearm-scales", nargs="+", type=float)
+    optimize.add_argument("--wrist-scales", nargs="+", type=float)
+    optimize.add_argument("--base-x-values", nargs="+", type=float, default=[0.0, 0.03, 0.05])
+    optimize.add_argument("--base-y-values", nargs="+", type=float, default=[0.0])
+    optimize.add_argument("--minimum-reach-margin", type=float, default=0.03)
+    optimize.add_argument("--path-cost-weight", type=float, default=0.02)
+    optimize.add_argument("--output", type=Path, required=True)
+
+    robust = sub.add_parser("robustness-benchmark")
+    robust.add_argument("--protocol", choices=PROTOCOL_TYPES)
+    robust.add_argument("--objects", nargs="+", choices=OBJECT_TYPES)
+    robust.add_argument("--tasks", nargs="+", choices=TASK_TYPES)
+    robust.add_argument("--panda-xml", type=Path)
+    robust.add_argument("--auto-fit-panda", action="store_true")
+    robust.add_argument("--full-candidate-limit", type=int, default=2)
+    robust.add_argument("--position-tolerance", type=float, default=0.05)
+    robust.add_argument("--trials", type=int, default=10)
+    robust.add_argument("--seed", type=int, default=42)
+    robust.add_argument("--position-noise", type=float, default=0.01)
+    robust.add_argument("--obstacle-noise", type=float, default=0.01)
+    robust.add_argument("--output", type=Path, required=True)
+
+    failure = sub.add_parser("failure-analysis")
+    failure.add_argument("--input", type=Path, required=True)
+    failure.add_argument("--output-json", type=Path, required=True)
+    failure.add_argument("--output-md", type=Path)
 
     visualize = sub.add_parser("visualize-results")
     visualize.add_argument("--benchmark", type=Path, required=True)
@@ -473,17 +513,23 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, sort_keys=True, allow_nan=False))
         return 0 if payload["passed"] else 1
     if args.command == "benchmark":
+        objects, tasks, auto_fit_panda, protocol_payload = resolve_protocol_inputs(
+            protocol_name=args.protocol,
+            objects=args.objects,
+            tasks=args.tasks,
+            auto_fit_panda=args.auto_fit_panda,
+        )
         results = [
             _run_static_case(
                 object_type,
                 task_name,
                 panda_xml=args.panda_xml,
-                auto_fit_panda=args.auto_fit_panda,
+                auto_fit_panda=auto_fit_panda,
                 position_tolerance=args.position_tolerance,
                 full_candidate_limit=args.full_candidate_limit,
             )
-            for object_type in args.objects
-            for task_name in args.tasks
+            for object_type in objects
+            for task_name in tasks
         ]
         feasible = [
             row
@@ -493,12 +539,13 @@ def main(argv: list[str] | None = None) -> int:
         best = min(feasible, key=lambda row: (row["path_length"], row["lift_height"])) if feasible else None
         payload = {
             "schema_version": 1,
-            "objects": list(args.objects),
-            "tasks": list(args.tasks),
+            "protocol": protocol_payload,
+            "objects": list(objects),
+            "tasks": list(tasks),
             "total_runs": len(results),
             "successful_runs": len(feasible),
             "panda_xml": None if args.panda_xml is None else str(args.panda_xml),
-            "auto_fit_panda": bool(args.auto_fit_panda),
+            "auto_fit_panda": bool(auto_fit_panda),
             "best": None if best is None else {
                 "object_type": best["object_type"],
                 "task_name": best["task_name"],
@@ -572,20 +619,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.command == "morphology-benchmark":
+        objects, tasks, auto_fit_panda, protocol_payload = resolve_protocol_inputs(
+            protocol_name=args.protocol,
+            objects=args.objects,
+            tasks=args.tasks,
+            auto_fit_panda=args.auto_fit_panda,
+        )
         results = [
             _run_morphology_case(
                 design_name,
                 object_type,
                 task_name,
                 panda_xml=args.panda_xml,
-                auto_fit_panda=args.auto_fit_panda,
+                auto_fit_panda=auto_fit_panda,
                 position_tolerance=args.position_tolerance,
                 full_candidate_limit=args.full_candidate_limit,
                 minimum_reach_margin=args.minimum_reach_margin,
             )
             for design_name in args.arm_designs
-            for object_type in args.objects
-            for task_name in args.tasks
+            for object_type in objects
+            for task_name in tasks
         ]
         summaries = _summarize_morphology(results)
         feasible_summaries = [row for row in summaries if row["success_rate"] > 0.0]
@@ -597,9 +650,10 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "schema_version": 1,
             "evidence_scope": "equivalent arm morphology proxy plus optional Panda IK verification",
+            "protocol": protocol_payload,
             "arm_designs": list(args.arm_designs),
-            "objects": list(args.objects),
-            "tasks": list(args.tasks),
+            "objects": list(objects),
+            "tasks": list(tasks),
             "total_runs": len(results),
             "successful_runs": sum(1 for row in results if row["success"]),
             "best_design": None if best is None else best["arm_design"],
@@ -612,6 +666,77 @@ def main(argv: list[str] | None = None) -> int:
             f"morphology-benchmark: success={payload['successful_runs']}/{payload['total_runs']} "
             f"best={payload['best_design']} output={args.output}"
         )
+        return 0
+    if args.command == "optimize-morphology":
+        from .morphology_optimizer import optimize_morphology
+
+        objects, tasks, auto_fit_panda, protocol_payload = resolve_protocol_inputs(
+            protocol_name=args.protocol,
+            objects=args.objects,
+            tasks=args.tasks,
+            auto_fit_panda=args.auto_fit_panda,
+        )
+        scale_values = tuple(args.scale_values)
+        payload = optimize_morphology(
+            objects=objects,
+            tasks=tasks,
+            upper_scales=tuple(args.upper_scales or scale_values),
+            forearm_scales=tuple(args.forearm_scales or scale_values),
+            wrist_scales=tuple(args.wrist_scales or scale_values),
+            base_x_values=tuple(args.base_x_values),
+            base_y_values=tuple(args.base_y_values),
+            panda_xml=args.panda_xml,
+            auto_fit_panda=auto_fit_panda,
+            position_tolerance=args.position_tolerance,
+            full_candidate_limit=args.full_candidate_limit,
+            minimum_reach_margin=args.minimum_reach_margin,
+            path_cost_weight=args.path_cost_weight,
+        )
+        payload["protocol"] = protocol_payload
+        _write_json(payload, args.output)
+        print(
+            f"optimize-morphology: feasible={payload['feasible_candidates']}/{payload['total_candidates']} "
+            f"best={None if payload['best_design'] is None else payload['best_design']['arm_design']} "
+            f"output={args.output}"
+        )
+        return 0
+    if args.command == "robustness-benchmark":
+        from .robustness import run_robustness_benchmark
+
+        objects, tasks, auto_fit_panda, protocol_payload = resolve_protocol_inputs(
+            protocol_name=args.protocol,
+            objects=args.objects,
+            tasks=args.tasks,
+            auto_fit_panda=args.auto_fit_panda,
+        )
+        payload = run_robustness_benchmark(
+            objects=objects,
+            tasks=tasks,
+            trials=args.trials,
+            seed=args.seed,
+            position_noise=args.position_noise,
+            obstacle_noise=args.obstacle_noise,
+            panda_xml=args.panda_xml,
+            auto_fit_panda=auto_fit_panda,
+            position_tolerance=args.position_tolerance,
+            full_candidate_limit=args.full_candidate_limit,
+        )
+        payload["protocol"] = protocol_payload
+        _write_json(payload, args.output)
+        print(
+            f"robustness-benchmark: success={payload['successful_runs']}/{payload['total_runs']} "
+            f"output={args.output}"
+        )
+        return 0
+    if args.command == "failure-analysis":
+        from .failure_analysis import build_failure_analysis
+
+        payload = build_failure_analysis(json.loads(args.input.read_text(encoding="utf-8")))
+        _write_json(payload, args.output_json)
+        if args.output_md is not None:
+            args.output_md.parent.mkdir(parents=True, exist_ok=True)
+            args.output_md.write_text(payload["markdown"], encoding="utf-8")
+        print(f"failure-analysis: failed={payload['failed_runs']} output={args.output_json}")
         return 0
     if args.command == "visualize-results":
         manifest = visualize_results(args.benchmark, args.morphology, args.output_dir)

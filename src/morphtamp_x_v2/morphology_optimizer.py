@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+from typing import Any, Iterable
+
+from .cli import _run_static_case, _workspace_demand
+from .morphology import ArmDesign, pareto_designs
+
+
+def generate_scale_grid(
+    *,
+    upper_scales: Iterable[float],
+    forearm_scales: Iterable[float],
+    wrist_scales: Iterable[float],
+    base_x_values: Iterable[float],
+    base_y_values: Iterable[float] = (0.0,),
+) -> Iterable[ArmDesign]:
+    for upper in upper_scales:
+        for forearm in forearm_scales:
+            for wrist in wrist_scales:
+                for base_x in base_x_values:
+                    for base_y in base_y_values:
+                        yield ArmDesign(
+                            name=(
+                                f"opt_u{upper:.3f}_f{forearm:.3f}_w{wrist:.3f}"
+                                f"_bx{base_x:.3f}"
+                                + ("" if abs(float(base_y)) < 1e-12 else f"_by{base_y:.3f}")
+                            ),
+                            upper_scale=float(upper),
+                            forearm_scale=float(forearm),
+                            wrist_scale=float(wrist),
+                            base_shift=(float(base_x), float(base_y), 0.0),
+                            description="continuous grid-search candidate",
+                        )
+
+
+def _evaluate_design(
+    design: ArmDesign,
+    base_rows: list[dict[str, Any]],
+    *,
+    minimum_reach_margin: float,
+    path_cost_weight: float,
+) -> dict[str, Any]:
+    rows = []
+    for row in base_rows:
+        demand = _workspace_demand(row)
+        reach_margin = design.reach_proxy - demand
+        base_success = bool(row["success"]) and (
+            row.get("joint_metrics") is None or bool(row["joint_metrics"]["success"])
+        )
+        success = base_success and reach_margin >= minimum_reach_margin
+        failure_reasons = list(row.get("failure_reasons", ()))
+        if not success and reach_margin < minimum_reach_margin:
+            failure_reasons.append(f"reach_margin:{reach_margin:.6f}")
+        rows.append(
+            {
+                "object_type": row["object_type"],
+                "task_name": row["task_name"],
+                "success": success,
+                "path_length": row["path_length"],
+                "workspace_demand": demand,
+                "reach_margin": reach_margin,
+                "failure_reasons": failure_reasons,
+            }
+        )
+    successes = [row for row in rows if row["success"]]
+    success_rate = 0.0 if not rows else len(successes) / len(rows)
+    mean_path = 0.0 if not successes else sum(float(row["path_length"]) for row in successes) / len(successes)
+    objective = design.morphology_cost + path_cost_weight * mean_path
+    if success_rate < 1.0:
+        objective += 1000.0 * (1.0 - success_rate)
+    return {
+        "arm_design": design.name,
+        "design": design.to_json_dict(),
+        "runs": len(rows),
+        "successes": len(successes),
+        "success_rate": success_rate,
+        "morphology_cost": design.morphology_cost,
+        "objective": objective,
+        "mean_path_length": mean_path,
+        "minimum_reach_margin": min(float(row["reach_margin"]) for row in rows) if rows else 0.0,
+        "results": rows,
+    }
+
+
+def optimize_morphology(
+    *,
+    objects: tuple[str, ...],
+    tasks: tuple[str, ...],
+    upper_scales: Iterable[float],
+    forearm_scales: Iterable[float],
+    wrist_scales: Iterable[float],
+    base_x_values: Iterable[float],
+    base_y_values: Iterable[float] = (0.0,),
+    panda_xml: Any | None = None,
+    auto_fit_panda: bool = False,
+    position_tolerance: float = 0.05,
+    full_candidate_limit: int = 2,
+    minimum_reach_margin: float = 0.03,
+    path_cost_weight: float = 0.02,
+) -> dict[str, Any]:
+    base_rows = [
+        _run_static_case(
+            object_type,
+            task_name,
+            panda_xml=panda_xml,
+            auto_fit_panda=auto_fit_panda,
+            position_tolerance=position_tolerance,
+            full_candidate_limit=full_candidate_limit,
+        )
+        for object_type in objects
+        for task_name in tasks
+    ]
+    candidates = list(
+        generate_scale_grid(
+            upper_scales=upper_scales,
+            forearm_scales=forearm_scales,
+            wrist_scales=wrist_scales,
+            base_x_values=base_x_values,
+            base_y_values=base_y_values,
+        )
+    )
+    summaries = [
+        _evaluate_design(
+            design,
+            base_rows,
+            minimum_reach_margin=minimum_reach_margin,
+            path_cost_weight=path_cost_weight,
+        )
+        for design in candidates
+    ]
+    feasible = [row for row in summaries if row["success_rate"] >= 1.0]
+    best = min(feasible, key=lambda row: (row["objective"], row["morphology_cost"])) if feasible else None
+    return {
+        "schema_version": 1,
+        "optimization_type": "continuous_grid_search",
+        "objects": list(objects),
+        "tasks": list(tasks),
+        "total_candidates": len(summaries),
+        "feasible_candidates": len(feasible),
+        "minimum_reach_margin": minimum_reach_margin,
+        "path_cost_weight": path_cost_weight,
+        "best_design": best,
+        "pareto_designs": pareto_designs(summaries),
+        "design_summaries": summaries,
+        "base_case_results": base_rows,
+    }
