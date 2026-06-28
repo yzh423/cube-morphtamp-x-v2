@@ -1,0 +1,302 @@
+{
+  "best_successful": {
+    "max_position_error": 4.035032222465632e-10,
+    "object_type": "plate",
+    "path_length": 1.1215310706229666,
+    "task_name": "tabletop_easy"
+  },
+  "by_object": {
+    "bowl_proxy": {
+      "max_position_error": 0.0358434701735271,
+      "mean_path_length": 2.216504856934296,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "capsule": {
+      "max_position_error": 0.032681833536676065,
+      "mean_path_length": 2.168557248757601,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "cube": {
+      "max_position_error": 0.03415907045738695,
+      "mean_path_length": 2.2391072722346084,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "cylinder": {
+      "max_position_error": 0.03209142913752512,
+      "mean_path_length": 2.2044990929426946,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "flat_box": {
+      "max_position_error": 0.03616185139203976,
+      "mean_path_length": 2.2668384838294395,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "mug_proxy": {
+      "max_position_error": 0.02364314331911238,
+      "mean_path_length": 2.1942128581416567,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "plate": {
+      "max_position_error": 0.035725222259862945,
+      "mean_path_length": 2.2703733592905455,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "ring": {
+      "max_position_error": 0.03554537879662362,
+      "mean_path_length": 2.2636769470184777,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "sphere": {
+      "max_position_error": 0.03466665242387286,
+      "mean_path_length": 2.2357742030214447,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    },
+    "tall_box": {
+      "max_position_error": 0.020647327216702982,
+      "mean_path_length": 2.1738770851778004,
+      "runs": 11,
+      "success_rate": 1.0,
+      "successes": 11
+    }
+  },
+  "by_task": {
+    "around_wall": {
+      "max_position_error": 0.033726181535650296,
+      "mean_path_length": 2.4000955778828947,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "compound_shelf_barrier": {
+      "max_position_error": 3.5567680023963057e-10,
+      "mean_path_length": 2.626052814745551,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "diagonal_reach_around": {
+      "max_position_error": 0.013510367610925444,
+      "mean_path_length": 2.9489795898693902,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "far_corner": {
+      "max_position_error": 3.727583686640424e-10,
+      "mean_path_length": 1.9119242473891653,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "folded_transfer": {
+      "max_position_error": 3.8945756751343454e-10,
+      "mean_path_length": 2.548244000210536,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "narrow_slot": {
+      "max_position_error": 0.03616185139203976,
+      "mean_path_length": 2.164449949492965,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "over_barrier": {
+      "max_position_error": 3.6386917282587327e-10,
+      "mean_path_length": 2.45450303378639,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "shelf_pick": {
+      "max_position_error": 3.7854775006259075e-10,
+      "mean_path_length": 1.706767084633245,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "shelf_place": {
+      "max_position_error": 3.7129040978349125e-10,
+      "mean_path_length": 2.1023242447515718,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "tabletop_easy": {
+      "max_position_error": 4.2033155909829704e-10,
+      "mean_path_length": 1.124940031194612,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    },
+    "under_bridge": {
+      "max_position_error": 3.6048786980142897e-10,
+      "mean_path_length": 2.4684829741271,
+      "runs": 10,
+      "success_rate": 1.0,
+      "successes": 10
+    }
+  },
+  "failed_cases": [],
+  "failure_taxonomy": {
+    "by_object": {
+      "bowl_proxy": {},
+      "capsule": {},
+      "cube": {},
+      "cylinder": {},
+      "flat_box": {},
+      "mug_proxy": {},
+      "plate": {
+        "grasp_ik_error": 33,
+        "grasp_orientation_error": 27
+      },
+      "ring": {},
+      "sphere": {},
+      "tall_box": {}
+    },
+    "by_task": {
+      "around_wall": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 2
+      },
+      "compound_shelf_barrier": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "diagonal_reach_around": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "far_corner": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 2
+      },
+      "folded_transfer": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "narrow_slot": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "over_barrier": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 1
+      },
+      "shelf_pick": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "shelf_place": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "tabletop_easy": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 3
+      },
+      "under_bridge": {
+        "grasp_ik_error": 3,
+        "grasp_orientation_error": 1
+      }
+    },
+    "overall_code_counts": {
+      "grasp_ik_error": 33,
+      "grasp_orientation_error": 27
+    },
+    "rows": 110,
+    "rows_with_failures": 11
+  },
+  "grasp_planning": {
+    "coarse_pruned_candidates": 44,
+    "coarse_successes": 253,
+    "full_successes": 220,
+    "mean_coarse_candidates": 2.4,
+    "mean_full_candidates": 2.0,
+    "rejection_code_counts": {
+      "ik_error": 33,
+      "orientation_error": 27
+    },
+    "rows_with_grasp_data": 110,
+    "rows_without_grasp_data": 0,
+    "runs": 110,
+    "selected_strategy_counts": {
+      "bowl_center_top_pinch": 11,
+      "box_side_pinch": 1,
+      "box_top_center_pinch": 10,
+      "cup_high_body_pinch": 11,
+      "cylinder_high_body_pinch": 11,
+      "flat_box_center_top_pinch": 1,
+      "flat_box_edge_pinch": 10,
+      "long_axis_side_pinch": 11,
+      "plate_clearance_top_pinch": 11,
+      "ring_center_top_pinch": 1,
+      "ring_edge_pinch": 10,
+      "spherical_center_pinch": 1,
+      "spherical_high_pinch": 10,
+      "tall_box_high_body_pinch": 11
+    }
+  },
+  "hardest_tasks": [
+    "tabletop_easy",
+    "shelf_pick",
+    "far_corner",
+    "shelf_place",
+    "narrow_slot",
+    "around_wall",
+    "over_barrier",
+    "under_bridge",
+    "folded_transfer",
+    "compound_shelf_barrier",
+    "diagonal_reach_around"
+  ],
+  "overall": {
+    "max_position_error": 0.03616185139203976,
+    "mean_path_length": 2.2233421407348564,
+    "runs": 110,
+    "success_rate": 1.0,
+    "successes": 110
+  },
+  "schema_version": 1,
+  "source_schema_version": 1,
+  "task_splits": {
+    "development": [
+      "tabletop_easy",
+      "over_barrier"
+    ],
+    "heldout": [
+      "compound_shelf_barrier",
+      "diagonal_reach_around",
+      "under_bridge"
+    ],
+    "main": [
+      "shelf_place",
+      "shelf_pick",
+      "narrow_slot",
+      "folded_transfer",
+      "far_corner",
+      "around_wall",
+      "over_barrier"
+    ],
+    "unassigned": []
+  }
+}
