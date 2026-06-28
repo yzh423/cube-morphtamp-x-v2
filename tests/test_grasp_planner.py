@@ -237,4 +237,5 @@ def test_candidate_evaluation_serializes_without_nan_or_infinity():
     assert row["min_joint_margin"] is None
     assert row["joint_path_length"] == 0.0
     assert row["max_joint_step"] == 0.0
+    assert row["min_sigma"] is None
     assert row["collision_count"] == 4

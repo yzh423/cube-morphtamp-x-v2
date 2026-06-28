@@ -28,6 +28,7 @@ class PandaJointFrame:
     collision_count: int = 0
     joint_margin: float = 0.0
     condition_number: float | None = None
+    min_singular_value: float | None = None
     object_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -47,6 +48,7 @@ class PandaJointFrame:
             "collision_count": self.collision_count,
             "joint_margin": self.joint_margin,
             "condition_number": self.condition_number,
+            "min_singular_value": self.min_singular_value,
             "object_quat": list(self.object_quat),
         }
 
@@ -249,6 +251,12 @@ class MuJoCoPandaIK:
         if len(singular_values) == 0 or float(np.min(singular_values)) <= 1e-12:
             return None
         return float(np.max(singular_values) / np.min(singular_values))
+
+    def min_singular_value(self) -> float | None:
+        singular_values = np.linalg.svd(self.jacobian(), compute_uv=False)
+        if len(singular_values) == 0:
+            return None
+        return float(np.min(singular_values))
 
     def collision_violation_count(self) -> int:
         count = 0
@@ -592,6 +600,7 @@ def solve_joint_replay(
                 collision_count=int(collision_count),
                 joint_margin=ik.joint_margin(q),
                 condition_number=ik.condition_number(),
+                min_singular_value=ik.min_singular_value(),
                 object_quat=frame.object_quat,
             )
         )

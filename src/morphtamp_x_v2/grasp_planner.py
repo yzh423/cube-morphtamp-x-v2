@@ -33,8 +33,9 @@ class CandidateEvaluation:
     joint_path_length: float = 0.0
     max_joint_step: float = 0.0
     max_condition_number: float | None = None
+    min_sigma: float | None = None
 
-    def score_key(self) -> tuple[int, int, float, float, int, float, float, float, float, float]:
+    def score_key(self) -> tuple[int, int, float, float, int, float, float, float, float, float, float]:
         residual = float(self.max_position_error)
         residual_for_ranking = 0.0 if residual <= 1e-4 else residual
         orientation_error = float(self.max_orientation_error)
@@ -44,6 +45,11 @@ class CandidateEvaluation:
             if self.max_condition_number is not None and math.isfinite(float(self.max_condition_number))
             else 0.0
         )
+        sigma_penalty = (
+            -float(self.min_sigma)
+            if self.min_sigma is not None and math.isfinite(float(self.min_sigma))
+            else 0.0
+        )
         return (
             0 if self.success else 1,
             int(self.collision_count),
@@ -51,6 +57,7 @@ class CandidateEvaluation:
             orientation_for_ranking,
             0 if self.min_joint_margin >= 0.02 else 1,
             -float(self.min_joint_margin),
+            sigma_penalty,
             condition,
             float(self.joint_path_length),
             float(self.max_joint_step),
@@ -71,6 +78,7 @@ class CandidateEvaluation:
             "max_condition_number": None
             if self.max_condition_number is None
             else _json_number(float(self.max_condition_number)),
+            "min_sigma": None if self.min_sigma is None else _json_number(float(self.min_sigma)),
             "failure_reasons": list(self.failure_reasons),
         }
 
@@ -119,7 +127,7 @@ def joint_motion_metrics(q_sequence: tuple[tuple[float, ...], ...]) -> tuple[flo
     return float(total), float(max_step)
 
 
-def replay_joint_motion_metrics(replay) -> tuple[float, float, float | None]:
+def replay_joint_motion_metrics(replay) -> tuple[float, float, float | None, float | None]:
     joint_path, max_step = joint_motion_metrics(tuple(frame.q for frame in replay.frames))
     finite_conditions = [
         float(frame.condition_number)
@@ -127,7 +135,14 @@ def replay_joint_motion_metrics(replay) -> tuple[float, float, float | None]:
         if frame.condition_number is not None and math.isfinite(float(frame.condition_number))
     ]
     max_condition = max(finite_conditions) if finite_conditions else None
-    return joint_path, max_step, max_condition
+    finite_sigmas = [
+        float(frame.min_singular_value)
+        for frame in replay.frames
+        if getattr(frame, "min_singular_value", None) is not None
+        and math.isfinite(float(frame.min_singular_value))
+    ]
+    min_sigma = min(finite_sigmas) if finite_sigmas else None
+    return joint_path, max_step, max_condition, min_sigma
 
 
 def build_coarse_replay_frames(
@@ -198,7 +213,7 @@ def _evaluate_panda_candidate(
     collision_count = sum(int(frame.collision_count) for frame in replay.frames)
     margins = [float(frame.joint_margin) for frame in replay.frames if math.isfinite(float(frame.joint_margin))]
     min_margin = min(margins) if margins else 0.0
-    joint_path, max_step, max_condition = replay_joint_motion_metrics(replay)
+    joint_path, max_step, max_condition, min_sigma = replay_joint_motion_metrics(replay)
     success = bool(replay.success and collision_count == 0)
     return (
         CandidateEvaluation(
@@ -213,6 +228,7 @@ def _evaluate_panda_candidate(
             joint_path_length=joint_path,
             max_joint_step=max_step,
             max_condition_number=max_condition,
+            min_sigma=min_sigma,
         ),
         phases,
     )
@@ -242,7 +258,7 @@ def _evaluate_coarse_panda_candidate(
     collision_count = sum(int(frame.collision_count) for frame in replay.frames)
     margins = [float(frame.joint_margin) for frame in replay.frames if math.isfinite(float(frame.joint_margin))]
     min_margin = min(margins) if margins else 0.0
-    joint_path, max_step, max_condition = replay_joint_motion_metrics(replay)
+    joint_path, max_step, max_condition, min_sigma = replay_joint_motion_metrics(replay)
     success = bool(replay.success and collision_count == 0)
     return (
         CandidateEvaluation(
@@ -257,6 +273,7 @@ def _evaluate_coarse_panda_candidate(
             joint_path_length=joint_path,
             max_joint_step=max_step,
             max_condition_number=max_condition,
+            min_sigma=min_sigma,
         ),
         phases,
     )

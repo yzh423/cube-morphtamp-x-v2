@@ -179,6 +179,7 @@ def test_joint_replay_frame_schema_contains_7d_quality_metrics(tmp_path):
     assert "collision_count" in row
     assert "joint_margin" in row
     assert "condition_number" in row
+    assert "min_singular_value" in row
     assert "target_quat" in row
     assert "tcp_quat" in row
     assert "orientation_error" in row
@@ -188,6 +189,7 @@ def test_joint_replay_frame_schema_contains_7d_quality_metrics(tmp_path):
     assert len(row["object_quat"]) == 4
     assert row["collision_count"] == 0
     assert row["joint_margin"] >= 0.0
+    assert row["min_singular_value"] is None or row["min_singular_value"] >= 0.0
 
 
 def test_solve_joint_replay_reports_orientation_failures_for_6d_targets(tmp_path):

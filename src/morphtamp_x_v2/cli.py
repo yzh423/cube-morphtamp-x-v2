@@ -398,6 +398,7 @@ def _run_static_case(
             "min_joint_margin": selection.selected_evaluation.min_joint_margin,
             "joint_path_length": selection.selected_evaluation.joint_path_length,
             "max_joint_step": selection.selected_evaluation.max_joint_step,
+            "min_sigma": selection.selected_evaluation.min_sigma,
             "max_condition_number": selection.selected_evaluation.max_condition_number,
             "failure_reasons": list(selection.selected_evaluation.failure_reasons),
             "joint_count": len(replay.joint_names),
