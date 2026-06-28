@@ -244,48 +244,71 @@ python -m morphtamp_x_v2.cli morphology-benchmark \
 ## Continuous morphology optimization
 
 Use this when you want to move beyond the preset design list and search over
-segment scales and base placement while enforcing a robust reach margin:
+segment scales and base placement while enforcing a robust reach margin. For
+Panda-aware runs, use `--base-results-cache`; the real Panda IK / Jacobian
+base cases are expensive, and the cache makes interrupted runs resumable:
 
 ```bash
 python -m morphtamp_x_v2.cli optimize-morphology \
-  --protocol fixed \
-  --scale-values 0.82 0.90 1.00 1.10 \
+  --protocol heldout_fixed \
+  --panda-xml ~/robocasa/mujoco_menagerie/franka_emika_panda/scene.xml \
+  --scale-values 0.70 0.82 0.90 1.00 1.10 \
   --base-x-values 0.00 0.03 0.05 \
-  --minimum-reach-margin 0.03 \
+  --minimum-reach-margin 0.05 \
   --minimum-sigma 0.08 \
   --maximum-condition-number 30 \
   --path-cost-weight 0.02 \
-  --output results/current_continuous_morphology.json
+  --base-results-cache results/heldout_panda_base_cache.json \
+  --output results/heldout_panda_singularity_morphology.json
 ```
 
 Analyze the resulting design trade-offs:
 
 ```bash
 python -m morphtamp_x_v2.cli design-analysis \
-  --input results/current_continuous_morphology.json \
-  --output-json results/current_design_analysis.json \
-  --output-md results/current_design_analysis.md
+  --input results/heldout_panda_singularity_morphology.json \
+  --output-json results/heldout_panda_design_analysis.json \
+  --output-md results/heldout_panda_design_analysis.md
 ```
 
 ## Robustness benchmark
 
 Use this after a fixed benchmark passes to test whether the result survives
-small pose and obstacle perturbations:
+small pose and obstacle perturbations. Panda-aware robustness is expensive, so
+use `--results-cache` for resumable overnight runs. The cache is trial-indexed:
+you can run 5 trials first, then rerun with 10 or 20 trials and the completed
+rows will be reused as long as the objects, tasks, seed, perturbation settings,
+Panda XML, candidate limit, and tolerance stay fixed.
 
 ```bash
 python -m morphtamp_x_v2.cli robustness-benchmark \
-  --protocol fixed \
-  --trials 10 \
+  --protocol heldout_fixed \
+  --panda-xml ~/robocasa/mujoco_menagerie/franka_emika_panda/scene.xml \
+  --trials 5 \
   --seed 42 \
   --position-noise 0.01 \
   --obstacle-noise 0.01 \
-  --output results/current_robustness.json
+  --position-tolerance 0.05 \
+  --full-candidate-limit 1 \
+  --results-cache results/heldout_panda_robustness_full_cache.json \
+  --output results/heldout_panda_robustness_full.json
 ```
+
+The robustness JSON now contains a report-ready `summary` block with:
+
+- overall success rate and failed-run entries;
+- maximum and mean position error;
+- minimum and mean Panda Jacobian singular value;
+- maximum and mean condition number;
+- mean path length;
+- by-object and by-task success tables.
 
 ## Failure analysis
 
 Turn any benchmark-like JSON containing a `results` list into a compact failure
-taxonomy:
+taxonomy. Static task failures are reported with a `task:` prefix, and Panda /
+Franka joint-replay failures are reported with a `joint:` prefix so IK,
+collision, singularity, and reach-margin causes do not get mixed together:
 
 ```bash
 python -m morphtamp_x_v2.cli failure-analysis \
@@ -312,6 +335,27 @@ results/current_figures/visualization_manifest.json
 ```
 
 Look at `data_quality.warnings` before using figures in a report.
+
+## Final evidence and report artifacts
+
+For the current Panda-aware held-out result package, the tracked compact evidence
+file is:
+
+```bash
+evidence/heldout_panda_final_summary.json
+```
+
+The current report-style results chapter is:
+
+```bash
+docs/results/panda_heldout_final_report.md
+```
+
+The full raw experiment outputs are intentionally kept under the untracked
+`results/` directory. When syncing this repository to WSL, exclude only the
+root result directory with an anchored rule such as `/results/`; do not use a
+bare `results/` exclude, because that can also skip tracked documentation paths
+like `docs/results/`.
 
 ## Object library
 

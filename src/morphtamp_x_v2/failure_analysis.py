@@ -11,6 +11,25 @@ def _reason_code(reason: str) -> str:
     return text
 
 
+def _row_success(row: dict[str, Any]) -> bool:
+    joint_metrics = row.get("joint_metrics")
+    return bool(row.get("success", False)) and (
+        joint_metrics is None or bool(joint_metrics.get("success", False))
+    )
+
+
+def _failure_reasons(row: dict[str, Any]) -> list[str]:
+    reasons = [f"task:{reason}" for reason in row.get("failure_reasons", ())]
+    joint_metrics = row.get("joint_metrics")
+    if isinstance(joint_metrics, dict) and not bool(joint_metrics.get("success", True)):
+        joint_reasons = list(joint_metrics.get("failure_reasons", ()))
+        if joint_reasons:
+            reasons.extend(f"joint:{reason}" for reason in joint_reasons)
+        else:
+            reasons.append("joint:unspecified")
+    return reasons
+
+
 def _counter_table(title: str, counter: Counter[str]) -> list[str]:
     lines = [f"## {title}", "", "| Item | Count |", "|---|---:|"]
     if not counter:
@@ -24,7 +43,7 @@ def _counter_table(title: str, counter: Counter[str]) -> list[str]:
 
 def build_failure_analysis(payload: dict[str, Any]) -> dict[str, Any]:
     rows = list(payload.get("results", ()))
-    failures = [row for row in rows if not bool(row.get("success", False))]
+    failures = [row for row in rows if not _row_success(row)]
     by_design: Counter[str] = Counter()
     by_task: Counter[str] = Counter()
     by_object: Counter[str] = Counter()
@@ -35,7 +54,7 @@ def build_failure_analysis(payload: dict[str, Any]) -> dict[str, Any]:
         by_design[str(row.get("arm_design", "unspecified"))] += 1
         by_task[str(row.get("task_name", "unknown_task"))] += 1
         by_object[str(row.get("object_type", "unknown_object"))] += 1
-        reasons = list(row.get("failure_reasons", ()))
+        reasons = _failure_reasons(row)
         if not reasons:
             reason_codes["unspecified"] += 1
         for reason in reasons:

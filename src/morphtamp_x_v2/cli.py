@@ -161,6 +161,21 @@ def parser() -> argparse.ArgumentParser:
     optimize.add_argument("--path-cost-weight", type=float, default=0.02)
     optimize.add_argument("--minimum-sigma", type=float)
     optimize.add_argument("--maximum-condition-number", type=float)
+    optimize.add_argument(
+        "--base-results-cache",
+        type=Path,
+        help=(
+            "Optional incremental cache for expensive object-task base evaluations. "
+            "When present, completed base cases are reused and missing cases are appended."
+        ),
+    )
+    optimize.add_argument(
+        "--no-reuse-base-results",
+        dest="reuse_base_results",
+        action="store_false",
+        default=True,
+        help="Ignore existing base-results cache entries and recompute base cases.",
+    )
     optimize.add_argument("--output", type=Path, required=True)
 
     robust = sub.add_parser("robustness-benchmark")
@@ -175,6 +190,18 @@ def parser() -> argparse.ArgumentParser:
     robust.add_argument("--seed", type=int, default=42)
     robust.add_argument("--position-noise", type=float, default=0.01)
     robust.add_argument("--obstacle-noise", type=float, default=0.01)
+    robust.add_argument(
+        "--results-cache",
+        type=Path,
+        help="Optional incremental cache for expensive robustness runs; enables resume after interruption.",
+    )
+    robust.add_argument(
+        "--no-reuse-results-cache",
+        dest="reuse_results_cache",
+        action="store_false",
+        default=True,
+        help="Ignore existing robustness cache rows and recompute all trials.",
+    )
     robust.add_argument("--output", type=Path, required=True)
 
     failure = sub.add_parser("failure-analysis")
@@ -347,18 +374,19 @@ def _run_static_case(
     object_type: str,
     task_name: str,
     *,
+    scenario: PickPlaceScenario | None = None,
     panda_xml: Path | None = None,
     auto_fit_panda: bool = False,
     position_tolerance: float = 0.05,
     full_candidate_limit: int = 2,
 ) -> dict:
-    if panda_xml is not None and auto_fit_panda:
+    if scenario is None and panda_xml is not None and auto_fit_panda:
         scenario = auto_fit_panda_scenario(
             panda_xml,
             object_type=object_type,
             task_name=task_name,
         )
-    else:
+    elif scenario is None:
         scenario = make_scenario(object_type=object_type, task_name=task_name)
     if panda_xml is None:
         selection = select_grasp_plan(
@@ -701,6 +729,8 @@ def main(argv: list[str] | None = None) -> int:
             path_cost_weight=args.path_cost_weight,
             minimum_sigma=args.minimum_sigma,
             maximum_condition_number=args.maximum_condition_number,
+            base_results_cache=args.base_results_cache,
+            reuse_base_results=args.reuse_base_results,
         )
         payload["protocol"] = protocol_payload
         _write_json(payload, args.output)
@@ -730,6 +760,8 @@ def main(argv: list[str] | None = None) -> int:
             auto_fit_panda=auto_fit_panda,
             position_tolerance=args.position_tolerance,
             full_candidate_limit=args.full_candidate_limit,
+            results_cache=args.results_cache,
+            reuse_results_cache=args.reuse_results_cache,
         )
         payload["protocol"] = protocol_payload
         _write_json(payload, args.output)

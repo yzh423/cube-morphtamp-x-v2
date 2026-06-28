@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Iterable
 
 from .cli import _run_static_case, _workspace_demand
@@ -31,6 +33,67 @@ def generate_scale_grid(
                             base_shift=(float(base_x), float(base_y), 0.0),
                             description="continuous grid-search candidate",
                         )
+
+
+def _cache_row_key(object_type: str, task_name: str) -> str:
+    return f"{object_type}\u241f{task_name}"
+
+
+def _base_cache_config(
+    *,
+    objects: tuple[str, ...],
+    tasks: tuple[str, ...],
+    panda_xml: Any | None,
+    auto_fit_panda: bool,
+    position_tolerance: float,
+    full_candidate_limit: int,
+) -> dict[str, Any]:
+    return {
+        "objects": list(objects),
+        "tasks": list(tasks),
+        "panda_xml": None if panda_xml is None else str(Path(panda_xml).expanduser()),
+        "auto_fit_panda": bool(auto_fit_panda),
+        "position_tolerance": float(position_tolerance),
+        "full_candidate_limit": int(full_candidate_limit),
+    }
+
+
+def _load_base_result_cache(
+    path: Path | None,
+    *,
+    expected_config: dict[str, Any],
+    reuse: bool,
+) -> dict[str, dict[str, Any]]:
+    if path is None or not reuse or not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("config") != expected_config:
+        return {}
+    rows = {}
+    for row in payload.get("base_case_results", ()):
+        rows[_cache_row_key(str(row["object_type"]), str(row["task_name"]))] = row
+    return rows
+
+
+def _write_base_result_cache(
+    path: Path | None,
+    *,
+    config: dict[str, Any],
+    rows_by_key: dict[str, dict[str, Any]],
+) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "cache_type": "morphology_optimizer_base_case_results",
+        "config": config,
+        "base_case_results": [rows_by_key[key] for key in sorted(rows_by_key)],
+    }
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _evaluate_design(
@@ -132,19 +195,47 @@ def optimize_morphology(
     path_cost_weight: float = 0.02,
     minimum_sigma: float | None = None,
     maximum_condition_number: float | None = None,
+    base_results_cache: str | Path | None = None,
+    reuse_base_results: bool = True,
 ) -> dict[str, Any]:
-    base_rows = [
-        _run_static_case(
-            object_type,
-            task_name,
-            panda_xml=panda_xml,
-            auto_fit_panda=auto_fit_panda,
-            position_tolerance=position_tolerance,
-            full_candidate_limit=full_candidate_limit,
-        )
-        for object_type in objects
-        for task_name in tasks
-    ]
+    objects = tuple(objects)
+    tasks = tuple(tasks)
+    cache_path = None if base_results_cache is None else Path(base_results_cache)
+    cache_config = _base_cache_config(
+        objects=objects,
+        tasks=tasks,
+        panda_xml=panda_xml,
+        auto_fit_panda=auto_fit_panda,
+        position_tolerance=position_tolerance,
+        full_candidate_limit=full_candidate_limit,
+    )
+    cached_rows = _load_base_result_cache(
+        cache_path,
+        expected_config=cache_config,
+        reuse=reuse_base_results,
+    )
+    hits = 0
+    misses = 0
+    base_rows = []
+    for object_type in objects:
+        for task_name in tasks:
+            key = _cache_row_key(object_type, task_name)
+            if key in cached_rows:
+                hits += 1
+                base_rows.append(cached_rows[key])
+                continue
+            row = _run_static_case(
+                object_type,
+                task_name,
+                panda_xml=panda_xml,
+                auto_fit_panda=auto_fit_panda,
+                position_tolerance=position_tolerance,
+                full_candidate_limit=full_candidate_limit,
+            )
+            misses += 1
+            cached_rows[key] = row
+            base_rows.append(row)
+            _write_base_result_cache(cache_path, config=cache_config, rows_by_key=cached_rows)
     candidates = list(
         generate_scale_grid(
             upper_scales=upper_scales,
@@ -180,6 +271,13 @@ def optimize_morphology(
             "maximum_condition_number": maximum_condition_number,
         },
         "path_cost_weight": path_cost_weight,
+        "base_result_cache": {
+            "path": None if cache_path is None else str(cache_path),
+            "enabled": cache_path is not None,
+            "reuse": bool(reuse_base_results),
+            "hits": hits,
+            "misses": misses,
+        },
         "best_design": best,
         "pareto_designs": pareto_designs(summaries),
         "design_summaries": summaries,

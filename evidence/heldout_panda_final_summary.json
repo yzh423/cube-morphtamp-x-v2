@@ -1,0 +1,91 @@
+{
+  "failure_analysis": {
+    "failed_runs": 0,
+    "reason_codes": {}
+  },
+  "optimization": {
+    "best_design": "opt_u0.900_f0.900_w0.820_bx0.000",
+    "best_design_parameters": {
+      "base_shift": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "continuous grid-search candidate",
+      "forearm_scale": 0.9,
+      "morphology_cost": 0.75712,
+      "name": "opt_u0.900_f0.900_w0.820_bx0.000",
+      "reach_proxy": 0.75712,
+      "upper_scale": 0.9,
+      "wrist_scale": 0.82
+    },
+    "best_maximum_condition_number": 4.096159158473751,
+    "best_mean_path_length": 2.742546509235039,
+    "best_minimum_reach_margin": 0.05114549621108844,
+    "best_minimum_sigma": 0.2405079904507164,
+    "best_morphology_cost": 0.75712,
+    "best_objective": 0.8119709301847008,
+    "best_singularity_passed": true,
+    "best_success_rate": 1.0,
+    "constraints": {
+      "maximum_condition_number": 30.0,
+      "minimum_sigma": 0.08
+    },
+    "feasible_candidates": 234,
+    "minimum_reach_margin_constraint": 0.05,
+    "total_candidates": 375
+  },
+  "robustness": {
+    "by_object": {
+      "bowl_proxy": 15,
+      "capsule": 15,
+      "cube": 15,
+      "cylinder": 15,
+      "flat_box": 15,
+      "mug_proxy": 15,
+      "plate": 15,
+      "ring": 15,
+      "sphere": 15,
+      "tall_box": 15
+    },
+    "by_task": {
+      "compound_shelf_barrier": 50,
+      "diagonal_reach_around": 50,
+      "under_bridge": 50
+    },
+    "max_condition_number": 4.211812901125048,
+    "max_position_error": 0.0244885693312509,
+    "mean_condition_number": 3.5590723532329167,
+    "mean_joint_path_length": 5.7420024011430675,
+    "mean_position_error": 0.0011229728864130936,
+    "mean_sigma": 0.26140654323326984,
+    "min_sigma": 0.23390447283229004,
+    "objects": [
+      "cube",
+      "sphere",
+      "cylinder",
+      "plate",
+      "mug_proxy",
+      "bowl_proxy",
+      "capsule",
+      "tall_box",
+      "flat_box",
+      "ring"
+    ],
+    "success_rate": 1.0,
+    "successful_runs": 150,
+    "tasks": [
+      "compound_shelf_barrier",
+      "diagonal_reach_around",
+      "under_bridge"
+    ],
+    "total_runs": 150,
+    "trials": 5
+  },
+  "source_paths": {
+    "design_analysis_md": "/home/yzh/robocasa/cube_morphtamp_x_v2/results/heldout_panda_design_analysis.md",
+    "optimization_json": "/home/yzh/robocasa/cube_morphtamp_x_v2/results/heldout_panda_singularity_morphology.json",
+    "robustness_failure_md": "/home/yzh/robocasa/cube_morphtamp_x_v2/results/heldout_panda_robustness_full_failure_analysis.md",
+    "robustness_json": "/home/yzh/robocasa/cube_morphtamp_x_v2/results/heldout_panda_robustness_full.json"
+  }
+}
