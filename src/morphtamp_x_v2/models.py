@@ -74,6 +74,8 @@ class Phase:
     tcp_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
     orientation_required: bool = False
     orientation_tolerance: float = 3.141592653589793
+    orientation_mode: str = "target"
+    orientation_weight: float = 0.0
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +89,8 @@ class Phase:
             "approach_axis": self.approach_axis,
             "orientation_required": self.orientation_required,
             "orientation_tolerance": self.orientation_tolerance,
+            "orientation_mode": self.orientation_mode,
+            "orientation_weight": self.orientation_weight,
         }
 
 
@@ -101,6 +105,10 @@ class ReplayFrame:
     object_attached: bool
     weld_active: bool
     progress: float
+    orientation_required: bool = False
+    orientation_tolerance: float = 3.141592653589793
+    orientation_mode: str = "target"
+    orientation_weight: float = 0.0
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -113,4 +121,8 @@ class ReplayFrame:
             "object_attached": self.object_attached,
             "weld_active": self.weld_active,
             "progress": self.progress,
+            "orientation_required": self.orientation_required,
+            "orientation_tolerance": self.orientation_tolerance,
+            "orientation_mode": self.orientation_mode,
+            "orientation_weight": self.orientation_weight,
         }

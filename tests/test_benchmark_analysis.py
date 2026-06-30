@@ -215,6 +215,46 @@ def test_analyze_benchmark_reports_missing_grasp_selection_data():
     assert summary["grasp_planning"]["mean_coarse_candidates"] == 0.0
 
 
+def test_summarize_benchmark_reports_physical_evidence_counts():
+    payload = sample_benchmark_payload()
+    payload["results"][0]["physical_evidence"] = {
+        "success": True,
+        "failure_reasons": [],
+        "checks": {
+            "grasp_retention": {"passed": True},
+            "release_support": {"passed": True},
+        },
+    }
+    payload["results"][1]["physical_evidence"] = {
+        "success": False,
+        "failure_reasons": ["grasp_retention", "obstacle_clearance"],
+        "checks": {
+            "grasp_retention": {"passed": False},
+            "release_support": {"passed": True},
+            "obstacle_clearance": {"passed": False},
+        },
+    }
+
+    summary = summarize_benchmark(payload)
+
+    physical = summary["physical_evidence"]
+    assert physical["rows_with_physical_evidence"] == 2
+    assert physical["rows_without_physical_evidence"] == 2
+    assert physical["physical_successes"] == 1
+    assert physical["physical_failures"] == 1
+    assert physical["physical_success_rate"] == 0.5
+    assert physical["failure_reason_counts"] == {
+        "grasp_retention": 1,
+        "obstacle_clearance": 1,
+    }
+    assert physical["failed_check_counts"] == {
+        "grasp_retention": 1,
+        "obstacle_clearance": 1,
+    }
+    assert summary["failure_taxonomy"]["overall_code_counts"]["physical_grasp_retention"] == 1
+    assert summary["failure_taxonomy"]["overall_code_counts"]["physical_obstacle_clearance"] == 1
+
+
 def test_task_splits_classify_all_library_benchmark_tasks():
     payload = {
         "schema_version": 1,

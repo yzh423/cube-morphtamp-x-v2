@@ -5,6 +5,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Local Codex / agent state. Keep private and out of GitHub.
+.codex/
+.agents/
+
 # Local environments
 .venv/
 venv/

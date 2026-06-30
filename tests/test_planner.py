@@ -48,7 +48,7 @@ def test_plan_pick_place_places_grasp_and_place_at_cube_centers():
     assert phases["transport"].tcp_position[2] >= phases["lift"].tcp_position[2]
 
 
-def test_plan_pick_place_lifts_above_obstacle_with_wrist_clearance():
+def test_plan_pick_place_lifts_above_obstacle_with_object_clearance_without_overlifting():
     scenario = PickPlaceScenario(
         cube_start=(0.40, -0.14, 0.20),
         place_target=(0.52, 0.14, 0.20),
@@ -59,9 +59,12 @@ def test_plan_pick_place_lifts_above_obstacle_with_wrist_clearance():
 
     phases = {phase.name: phase for phase in plan_pick_place(scenario)}
     obstacle_top = scenario.obstacle_center[2] + scenario.obstacle_size[2]
+    object_half_height = scenario.object_size[2]
 
-    assert phases["lift"].tcp_position[2] >= obstacle_top + 0.26 - 1e-12
-    assert phases["transport"].tcp_position[2] >= obstacle_top + 0.26 - 1e-12
+    required_center_z = obstacle_top + object_half_height + 0.08
+    assert phases["lift"].tcp_position[2] >= required_center_z - 1e-12
+    assert phases["transport"].tcp_position[2] >= required_center_z - 1e-12
+    assert phases["transport"].tcp_position[2] < obstacle_top + 0.26
 
 
 def test_plan_pick_place_adds_side_bypass_for_wall_like_obstacle():
@@ -77,7 +80,7 @@ def test_plan_pick_place_adds_side_bypass_for_wall_like_obstacle():
     assert abs(bypass.tcp_position[0] - scenario.obstacle_center[0]) > scenario.obstacle_size[0] + 0.08
 
 
-def test_library_scenario_aligns_side_pinch_tcp_with_object_center():
+def test_library_scenario_aligns_default_side_pinch_tcp_with_object_center():
     scenario = make_scenario(object_type="cube", task_name="tabletop_easy")
     phases = {phase.name: phase for phase in plan_pick_place(scenario)}
 
@@ -121,3 +124,26 @@ def test_attached_phases_keep_selected_grasp_orientation():
         assert phases[name].orientation_required is True
 
     assert phases["return_home"].grasp_strategy is None
+
+
+def test_default_obstacle_transfer_does_not_force_orientation_hold():
+    obstacle = make_scenario(object_type="cube", task_name="over_barrier")
+    tabletop = make_scenario(object_type="cube", task_name="tabletop_easy")
+
+    obstacle_phases = {phase.name: phase for phase in plan_pick_place(obstacle)}
+    tabletop_phases = {phase.name: phase for phase in plan_pick_place(tabletop)}
+
+    for name in [
+        "attach",
+        "lift",
+        "transport",
+        "descend",
+        "place",
+    ]:
+        assert obstacle_phases[name].orientation_required is False
+        assert obstacle_phases[name].orientation_weight == 0.0
+
+    assert obstacle_phases["grasp"].orientation_required is False
+    assert obstacle_phases["close_gripper"].orientation_required is False
+    assert tabletop_phases["transport"].orientation_required is False
+    assert tabletop_phases["transport"].orientation_weight == 0.0

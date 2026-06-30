@@ -16,6 +16,7 @@ class SceneBuildResult:
     object_body: str = "v2_cube"
     object_joint: str = "v2_cube_freejoint"
     weld_name: str = "v2_grasp_weld"
+    grasp_anchor_body: str = "v2_grasp_anchor"
     target_site: str = "v2_place_target"
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -25,6 +26,7 @@ class SceneBuildResult:
             "object_body": self.object_body,
             "object_joint": self.object_joint,
             "weld_name": self.weld_name,
+            "grasp_anchor_body": self.grasp_anchor_body,
             "target_site": self.target_site,
         }
 
@@ -113,7 +115,7 @@ def _remove_keyframes(root: ET.Element) -> None:
 
 def _choose_weld_body(root: ET.Element) -> str | None:
     names = [body.attrib["name"] for body in root.iter("body") if "name" in body.attrib]
-    for token in ("hand", "right_hand", "attachment", "link7"):
+    for token in ("attachment", "right_hand", "hand", "link7"):
         for name in names:
             if token in name.lower() and name != "v2_cube":
                 return str(name)
@@ -135,6 +137,16 @@ def build_pick_place_scene(
     _append_defaults(root)
     _remove_keyframes(root)
     worldbody = _ensure_child(root, "worldbody")
+    ET.SubElement(
+        worldbody,
+        "body",
+        {
+            "name": "v2_grasp_anchor",
+            "mocap": "true",
+            "pos": _float_text(scenario.cube_start),
+            "quat": "1 0 0 0",
+        },
+    )
     table = scenario.table_center
     table_size = tuple(float(item) / 2.0 for item in scenario.table_size)
     ET.SubElement(
@@ -226,21 +238,19 @@ def build_pick_place_scene(
                 "condim": "4",
             },
         )
-    weld_body = _choose_weld_body(root)
-    if weld_body is not None:
-        equality = _ensure_child(root, "equality")
-        ET.SubElement(
-            equality,
-            "weld",
-            {
-                "name": "v2_grasp_weld",
-                "body1": weld_body,
-                "body2": "v2_cube",
-                "active": "false",
-                "solref": "0.004 1",
-                "solimp": "0.95 0.99 0.001",
-            },
-        )
+    equality = _ensure_child(root, "equality")
+    ET.SubElement(
+        equality,
+        "weld",
+        {
+            "name": "v2_grasp_weld",
+            "body1": "v2_grasp_anchor",
+            "body2": "v2_cube",
+            "active": "false",
+            "solref": "0.004 1",
+            "solimp": "0.95 0.99 0.001",
+        },
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(root).write(output_path, encoding="utf-8", xml_declaration=False)
     return SceneBuildResult(output_xml=output_path, panda_xml=panda_path)

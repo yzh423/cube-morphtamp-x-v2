@@ -1,0 +1,98 @@
+{
+  "baselines": {
+    "compact_base_shift": {
+      "arm_design": "compact_base_shift",
+      "mean_path_length": 2.239634188748079,
+      "minimum_reach_margin": 0.09155549621108838,
+      "morphology_cost": 0.80503,
+      "runs": 110,
+      "success_rate": 1.0,
+      "successes": 110
+    },
+    "high_reach_arm": {
+      "arm_design": "high_reach_arm",
+      "mean_path_length": 2.239634188748079,
+      "minimum_reach_margin": 0.24245549621108853,
+      "morphology_cost": 0.9484300000000001,
+      "runs": 110,
+      "success_rate": 1.0,
+      "successes": 110
+    },
+    "long_forearm": {
+      "arm_design": "long_forearm",
+      "mean_path_length": 2.239634188748079,
+      "minimum_reach_margin": 0.21090549621108834,
+      "morphology_cost": 0.91688,
+      "runs": 110,
+      "success_rate": 1.0,
+      "successes": 110
+    },
+    "long_wrist": {
+      "arm_design": "long_wrist",
+      "mean_path_length": 2.239634188748079,
+      "minimum_reach_margin": 0.20044549621108843,
+      "morphology_cost": 0.90642,
+      "runs": 110,
+      "success_rate": 1.0,
+      "successes": 110
+    },
+    "nominal_panda": {
+      "arm_design": "nominal_panda",
+      "mean_path_length": 2.239634188748079,
+      "minimum_reach_margin": 0.1540254962110884,
+      "morphology_cost": 0.86,
+      "runs": 110,
+      "success_rate": 1.0,
+      "successes": 110
+    },
+    "short_arm": {
+      "arm_design": "short_arm",
+      "mean_path_length": 2.119706177875341,
+      "minimum_reach_margin": 0.016105496211088366,
+      "morphology_cost": 0.7220799999999999,
+      "runs": 110,
+      "success_rate": 0.8454545454545455,
+      "successes": 93
+    }
+  },
+  "components": {
+    "multi_grasp_selection": {
+      "active": true,
+      "mean_coarse_candidates": 2.4,
+      "mean_full_candidates": 2.0,
+      "rows_with_grasp_data": 110
+    },
+    "reach_margin_constraint": {
+      "active": true,
+      "evidence": 0.05114549621108844,
+      "threshold": 0.05
+    },
+    "singularity_constraint": {
+      "active": true,
+      "max_condition_number": 4.096159158473751,
+      "min_sigma": 0.2405079904507164,
+      "thresholds": {
+        "maximum_condition_number": 30.0,
+        "minimum_sigma": 0.08
+      }
+    }
+  },
+  "failure_boundary": {
+    "nominal_success_rate": 1.0,
+    "short_arm_exposes_boundary": true,
+    "short_arm_success_rate": 0.8454545454545455
+  },
+  "optimized_design": {
+    "maximum_condition_number": 4.096159158473751,
+    "minimum_reach_margin": 0.05114549621108844,
+    "minimum_sigma": 0.2405079904507164,
+    "morphology_cost": 0.75712,
+    "name": "opt_u0.900_f0.900_w0.820_bx0.000",
+    "success_rate": 1.0
+  },
+  "recommendation": {
+    "next_missing_evidence": [],
+    "paper_ready": true
+  },
+  "schema_version": 1
+}

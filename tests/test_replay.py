@@ -138,3 +138,43 @@ def test_replay_carries_object_with_tcp_relative_rigid_transform():
     assert quat_angle_error(transport_frame.object_quat, minus_ninety_z) < 1e-9
     assert release_frame.object_position == pytest.approx(transport_frame.object_position)
     assert quat_angle_error(release_frame.object_quat, transport_frame.object_quat) < 1e-9
+
+
+def test_replay_frames_preserve_phase_orientation_requirements():
+    scenario = PickPlaceScenario()
+    frames = build_replay_frames(
+        scenario,
+        (
+            Phase("home", scenario.cube_start, 0.08, False, "home"),
+            Phase(
+                "attach",
+                scenario.cube_start,
+                0.04,
+                True,
+                "attach",
+                orientation_mode="hold_attach",
+                orientation_weight=0.08,
+            ),
+            Phase(
+                "transport",
+                scenario.place_target,
+                0.04,
+                True,
+                "transport",
+                orientation_mode="hold_attach",
+                orientation_weight=0.08,
+            ),
+        ),
+        transition_frames=3,
+        hold_frames=1,
+    )
+
+    transport = next(
+        frame
+        for frame in frames
+        if frame.phase_name == "transport" and frame.progress == pytest.approx(1.0)
+    )
+
+    assert transport.orientation_mode == "hold_attach"
+    assert transport.orientation_weight > 0.0
+    assert transport.orientation_required is False

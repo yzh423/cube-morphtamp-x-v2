@@ -47,20 +47,23 @@ def test_object_and_task_libraries_expose_expected_entries():
         "near_to_far_reach",
         "far_to_near_retract",
         "folded_transfer",
-        "compound_shelf_barrier",
-        "diagonal_reach_around",
-    }.issubset(set(TASK_TYPES))
+            "compound_shelf_barrier",
+            "diagonal_reach_around",
+            "reach_boundary_far",
+            "tight_under_bridge",
+            "high_shelf_barrier",
+        }.issubset(set(TASK_TYPES))
     assert object_spec("sphere").geom_type == "sphere"
     assert make_scenario(object_type="mug_proxy", task_name="shelf_place").support_blocks
     assert make_scenario(object_type="cube", task_name="folded_transfer").motion_style == "fold_then_extend"
 
 
-def test_object_closed_widths_do_not_visually_interpenetrate_objects():
+def test_object_closed_widths_are_near_physical_grasp_widths():
     for name in OBJECT_TYPES:
         spec = object_spec(name)
-        assert spec.closed_width >= object_grasp_width(spec) + 0.004
-        if name == "cube":
-            assert spec.closed_width >= object_grasp_width(spec) + 0.020
+        grasp_width = object_grasp_width(spec)
+        assert spec.closed_width <= 1.20 * grasp_width
+        assert spec.closed_width >= 0.85 * grasp_width
         assert spec.open_width > spec.closed_width
         assert spec.open_width <= 0.080
 
@@ -182,6 +185,21 @@ def test_complex_tasks_cover_distinct_reach_directions():
     assert compound.obstacle_center is not None
     assert compound.cube_start[2] != compound.place_target[2]
     assert compound.motion_style == "compound"
+
+
+def test_stress_tasks_push_reach_clearance_and_height_constraints():
+    reach = make_scenario(object_type="cube", task_name="reach_boundary_far")
+    bridge = make_scenario(object_type="sphere", task_name="tight_under_bridge")
+    shelf = make_scenario(object_type="mug_proxy", task_name="high_shelf_barrier")
+
+    assert reach.place_target[0] - reach.cube_start[0] > 0.35
+    assert reach.motion_style == "extend"
+    assert bridge.obstacle_center is not None
+    assert bridge.obstacle_center[2] > bridge.cube_start[2]
+    assert bridge.lift_height < 0.13
+    assert shelf.place_target[2] > shelf.cube_start[2]
+    assert shelf.obstacle_center is not None
+    assert shelf.motion_style == "compound"
 
 
 def test_cli_accepts_object_task_and_benchmark_options():

@@ -4,7 +4,11 @@ import json
 
 from morphtamp_x_v2.cli import main, parser
 from morphtamp_x_v2.failure_analysis import build_failure_analysis
-from morphtamp_x_v2.robustness import perturb_scenario, run_robustness_benchmark
+from morphtamp_x_v2.robustness import (
+    perturb_scenario,
+    run_robustness_benchmark,
+    summarize_robustness_results,
+)
 from morphtamp_x_v2.tasks import make_scenario
 
 
@@ -227,6 +231,53 @@ def test_robustness_summary_reports_panda_quality_metrics(monkeypatch):
     assert payload["summary"]["mean_path_length"] == 0.6
     assert payload["summary"]["by_object"]["cube"]["success_rate"] == 1.0
     assert payload["summary"]["failed_runs"] == []
+
+
+def test_robustness_summary_reports_physical_evidence_counts():
+    rows = [
+        {
+            "object_type": "cube",
+            "task_name": "over_barrier",
+            "success": True,
+            "failure_reasons": [],
+            "path_length": 0.4,
+            "joint_metrics": {"success": True, "max_position_error": 0.01},
+            "physical_evidence": {
+                "success": True,
+                "failure_reasons": [],
+                "checks": {"grasp_retention": {"passed": True}},
+            },
+        },
+        {
+            "object_type": "sphere",
+            "task_name": "narrow_slot",
+            "success": False,
+            "failure_reasons": ["physical_evidence"],
+            "path_length": 0.6,
+            "joint_metrics": {"success": True, "max_position_error": 0.02},
+            "physical_evidence": {
+                "success": False,
+                "failure_reasons": ["release_support"],
+                "checks": {
+                    "grasp_retention": {"passed": True},
+                    "release_support": {"passed": False},
+                },
+            },
+        },
+    ]
+
+    summary = summarize_robustness_results(rows)
+
+    assert summary["physical_evidence"]["rows_with_physical_evidence"] == 2
+    assert summary["physical_evidence"]["physical_successes"] == 1
+    assert summary["physical_evidence"]["physical_failures"] == 1
+    assert summary["physical_evidence"]["physical_success_rate"] == 0.5
+    assert summary["physical_evidence"]["failure_reason_counts"] == {
+        "release_support": 1
+    }
+    assert summary["physical_evidence"]["failed_check_counts"] == {
+        "release_support": 1
+    }
 
 
 def test_robustness_cli_writes_json(tmp_path):

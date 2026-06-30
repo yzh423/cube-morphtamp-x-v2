@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from .benchmark_analysis import summarize_physical_evidence
 from .cli import _run_static_case
 from .models import PickPlaceScenario
 from .tasks import make_scenario
@@ -265,6 +266,7 @@ def summarize_robustness_results(results: list[dict[str, Any]]) -> dict[str, Any
         "max_condition_number": None if not condition_values else max(condition_values),
         "mean_condition_number": _mean(condition_values),
         "mean_path_length": _mean(path_lengths),
+        "physical_evidence": summarize_physical_evidence(results),
         "by_object": _group_summary(results, "object_type"),
         "by_task": _group_summary(results, "task_name"),
         "failed_runs": failed_runs,

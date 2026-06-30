@@ -11,7 +11,9 @@ from .viewer import (
     _cube_qvel_address,
     _gripper_addresses,
     _joint_addresses,
+    _mocap_id,
     _set_cube,
+    _set_mocap_pose,
     _set_weld,
     _update_weld_relative_pose,
     _weld_id,
@@ -67,6 +69,25 @@ def _contact_is_gripper_object(
     return object_side and gripper_side and not support_side
 
 
+def _gripper_contact_side(
+    *,
+    geom1_name: str,
+    body1_name: str,
+    geom2_name: str,
+    body2_name: str,
+) -> str:
+    names = " ".join((geom1_name, body1_name, geom2_name, body2_name)).lower()
+    if "left" in names and "finger" in names:
+        return "left_finger"
+    if "right" in names and "finger" in names:
+        return "right_finger"
+    if "finger" in names:
+        return "finger_unknown_side"
+    if "hand" in names or "gripper" in names:
+        return "palm_or_hand"
+    return "unknown"
+
+
 def _scan_obstacle_violations(mujoco: Any, model: Any, data: Any, *, phase_name: str) -> list[str]:
     violations: list[str] = []
     for contact_index in range(int(data.ncon)):
@@ -93,11 +114,13 @@ def _scan_gripper_object_contacts(
     data: Any,
     *,
     phase_name: str,
-) -> tuple[int, float, str | None, list[str]]:
+) -> tuple[int, float, str | None, list[str], set[str], dict[str, float]]:
     count = 0
     max_penetration = 0.0
     max_example: str | None = None
     examples: list[str] = []
+    sides: set[str] = set()
+    max_penetration_by_side: dict[str, float] = {}
     for contact_index in range(int(data.ncon)):
         contact = data.contact[contact_index]
         geom1 = _geom_name(mujoco, model, int(contact.geom1))
@@ -112,14 +135,25 @@ def _scan_gripper_object_contacts(
         ):
             continue
         count += 1
+        side = _gripper_contact_side(
+            geom1_name=geom1,
+            body1_name=body1,
+            geom2_name=geom2,
+            body2_name=body2,
+        )
+        sides.add(side)
         penetration = max(0.0, -float(contact.dist))
+        max_penetration_by_side[side] = max(
+            penetration,
+            max_penetration_by_side.get(side, 0.0),
+        )
         example = f"{phase_name}:{geom1 or body1}/{geom2 or body2}:{float(contact.dist):.6g}"
         if penetration > max_penetration:
             max_penetration = penetration
             max_example = example
         if len(examples) < 8:
             examples.append(example)
-    return count, max_penetration, max_example, examples
+    return count, max_penetration, max_example, examples, sides, max_penetration_by_side
 
 
 def _body_position(mujoco: Any, model: Any, data: Any, body_name: str) -> np.ndarray:
@@ -129,12 +163,136 @@ def _body_position(mujoco: Any, model: Any, data: Any, body_name: str) -> np.nda
     return np.asarray(data.xpos[body_id], dtype=float).copy()
 
 
+def _json_number(value: float | None) -> float | None:
+    if value is None:
+        return None
+    value = float(value)
+    return value if np.isfinite(value) else None
+
+
+def _build_dynamics_evidence(
+    *,
+    final_error: float,
+    position_tolerance: float,
+    weld_frames: int,
+    max_weld_tracking_error: float,
+    weld_tracking_tolerance: float,
+    obstacle_collisions: int,
+    gripper_object_contacts: int,
+    gripper_object_max_penetration: float,
+    gripper_object_contact_sides: tuple[str, ...] | set[str] | None = None,
+    gripper_object_max_penetration_by_side: dict[str, float] | None = None,
+    max_gripper_penetration: float | None = None,
+    require_two_sided_grasp: bool = False,
+    table_contacts: int,
+    settle_steps: int,
+) -> dict[str, Any]:
+    weld_retention_passed = int(weld_frames) > 0
+    reference_tracking_passed = (
+        float(max_weld_tracking_error) <= float(weld_tracking_tolerance)
+    )
+    grasp_contact_passed = int(gripper_object_contacts) > 0
+    contact_sides = set(gripper_object_contact_sides or ())
+    two_sided_contact_passed = (
+        not contact_sides
+        or {"left_finger", "right_finger"}.issubset(contact_sides)
+    )
+    gripper_penetration_passed = (
+        max_gripper_penetration is None
+        or float(gripper_object_max_penetration) <= float(max_gripper_penetration)
+    )
+    penetration_by_side = {
+        str(side): _json_number(value)
+        for side, value in sorted((gripper_object_max_penetration_by_side or {}).items())
+    }
+    dominant_side = None
+    if penetration_by_side:
+        dominant_side = max(
+            penetration_by_side,
+            key=lambda side: float(penetration_by_side[side] or 0.0),
+        )
+    release_settle_passed = (
+        float(final_error) <= float(position_tolerance)
+        and int(table_contacts) > 0
+    )
+    obstacle_clearance_passed = int(obstacle_collisions) == 0
+    checks = {
+        "weld_retention": {
+            "passed": weld_retention_passed,
+            "weld_frames": int(weld_frames),
+            "max_weld_tracking_error": _json_number(max_weld_tracking_error),
+            "weld_tracking_tolerance": float(weld_tracking_tolerance),
+        },
+        "reference_tracking": {
+            "passed": reference_tracking_passed,
+            "diagnostic_only": True,
+            "max_weld_tracking_error": _json_number(max_weld_tracking_error),
+            "weld_tracking_tolerance": float(weld_tracking_tolerance),
+            "note": (
+                "Compares MuJoCo weld-carried object pose with scripted replay "
+                "reference. It is diagnostic because Panda hand-body and TCP "
+                "frames can differ while the object remains welded, released, "
+                "and supported successfully."
+            ),
+        },
+        "grasp_contact": {
+            "passed": grasp_contact_passed,
+            "gripper_object_contacts": int(gripper_object_contacts),
+            "gripper_object_contact_sides": sorted(contact_sides),
+            "gripper_object_max_penetration": _json_number(gripper_object_max_penetration),
+        },
+        "two_sided_grasp_contact": {
+            "passed": two_sided_contact_passed,
+            "required_sides": ["left_finger", "right_finger"],
+            "observed_sides": sorted(contact_sides),
+            "required_for_success": bool(require_two_sided_grasp),
+            "diagnostic_only": not bool(require_two_sided_grasp),
+        },
+        "gripper_penetration": {
+            "passed": gripper_penetration_passed,
+            "gripper_object_max_penetration": _json_number(gripper_object_max_penetration),
+            "gripper_object_max_penetration_by_side": penetration_by_side,
+            "dominant_penetration_side": dominant_side,
+            "max_allowed_penetration": _json_number(max_gripper_penetration),
+        },
+        "release_settle": {
+            "passed": release_settle_passed,
+            "final_error": _json_number(final_error),
+            "position_tolerance": float(position_tolerance),
+            "table_contacts": int(table_contacts),
+            "settle_steps": int(settle_steps),
+        },
+        "obstacle_clearance": {
+            "passed": obstacle_clearance_passed,
+            "obstacle_collisions": int(obstacle_collisions),
+        },
+    }
+    failure_reasons = [
+        name for name, check in checks.items()
+        if not bool(check["passed"]) and not bool(check.get("diagnostic_only", False))
+    ]
+    return {
+        "schema_version": 1,
+        "evidence_scope": (
+            "MuJoCo equality-weld replay dynamics; conservative simulation evidence, "
+            "not force-controlled real grasp validation"
+        ),
+        "success": not failure_reasons,
+        "failure_reasons": failure_reasons,
+        "checks": checks,
+    }
+
+
 def validate_physics_replay(
     xml_path: str | Path,
     replay_path: str | Path,
     *,
     settle_steps: int = 80,
     position_tolerance: float = 0.035,
+    weld_tracking_tolerance: float = 0.03,
+    frame_substeps: int = 4,
+    max_gripper_penetration: float | None = None,
+    require_two_sided_grasp: bool = False,
 ) -> dict[str, Any]:
     try:
         import mujoco
@@ -156,6 +314,7 @@ def validate_physics_replay(
     cube_addr = _cube_address(mujoco, model)
     cube_qvel = _cube_qvel_address(mujoco, model)
     weld = _weld_id(mujoco, model)
+    mocap = _mocap_id(mujoco, model)
 
     weld_was_active = False
     weld_frames = 0
@@ -164,11 +323,19 @@ def validate_physics_replay(
     gripper_object_max_penetration = 0.0
     gripper_object_max_penetration_example: str | None = None
     gripper_object_examples: list[str] = []
+    gripper_object_contact_sides: set[str] = set()
+    gripper_object_max_penetration_by_side: dict[str, float] = {}
+    max_weld_tracking_error = 0.0
+    substeps = max(int(frame_substeps), 1)
     for frame in frames:
         data.qpos[joint_addr] = np.asarray(frame["q"], dtype=float)
         if len(gripper_addr):
             data.qpos[gripper_addr] = float(frame["gripper_width"]) / float(len(gripper_addr))
         weld_active = bool(frame["weld_active"])
+        tcp_position = list(frame.get("tcp_position", frame["object_position"]))
+        tcp_quat = list(frame.get("tcp_quat", frame.get("object_quat", [1.0, 0.0, 0.0, 0.0])))
+        if weld_active:
+            _set_mocap_pose(data, mocap, position=tcp_position, quat=tcp_quat)
         if weld_active and not weld_was_active:
             _set_cube(
                 data,
@@ -188,20 +355,36 @@ def validate_physics_replay(
                 quat=list(frame.get("object_quat", [1.0, 0.0, 0.0, 0.0])),
             )
         _set_weld(data, weld, weld_active)
-        mujoco.mj_step(model, data)
-        obstacle_violations.extend(_scan_obstacle_violations(mujoco, model, data, phase_name=str(frame["phase_name"])))
-        if weld_active or str(frame["phase_name"]) in {"close_gripper", "attach"}:
-            count, penetration, max_example, examples = _scan_gripper_object_contacts(
-                mujoco,
-                model,
-                data,
-                phase_name=str(frame["phase_name"]),
+        for _ in range(substeps):
+            if weld_active:
+                _set_mocap_pose(data, mocap, position=tcp_position, quat=tcp_quat)
+            mujoco.mj_step(model, data)
+            obstacle_violations.extend(_scan_obstacle_violations(mujoco, model, data, phase_name=str(frame["phase_name"])))
+            if weld_active or str(frame["phase_name"]) in {"close_gripper", "attach"}:
+                count, penetration, max_example, examples, sides, side_penetrations = _scan_gripper_object_contacts(
+                    mujoco,
+                    model,
+                    data,
+                    phase_name=str(frame["phase_name"]),
+                )
+                gripper_object_contacts += count
+                gripper_object_contact_sides.update(sides)
+                for side, side_penetration in side_penetrations.items():
+                    gripper_object_max_penetration_by_side[side] = max(
+                        gripper_object_max_penetration_by_side.get(side, 0.0),
+                        side_penetration,
+                    )
+                if penetration > gripper_object_max_penetration:
+                    gripper_object_max_penetration = penetration
+                    gripper_object_max_penetration_example = max_example
+                gripper_object_examples.extend(examples)
+        if weld_active:
+            cube_position = _body_position(mujoco, model, data, "v2_cube")
+            reference_position = np.asarray(frame["object_position"], dtype=float)
+            max_weld_tracking_error = max(
+                max_weld_tracking_error,
+                float(np.linalg.norm(cube_position - reference_position)),
             )
-            gripper_object_contacts += count
-            if penetration > gripper_object_max_penetration:
-                gripper_object_max_penetration = penetration
-                gripper_object_max_penetration_example = max_example
-            gripper_object_examples.extend(examples)
         weld_was_active = weld_active
         weld_frames += int(weld_active)
 
@@ -225,22 +408,29 @@ def validate_physics_replay(
             cube_contacts += 1
             if "world" in pair or "v2_table" in pair or any("table" in item for item in pair):
                 table_contacts += 1
-    failure_reasons: list[str] = []
-    if final_error > position_tolerance:
-        failure_reasons.append(f"final_error:{final_error:.6g}")
-    if weld_frames <= 0:
-        failure_reasons.append("weld_never_active")
     unique_obstacle_violations = tuple(dict.fromkeys(obstacle_violations))
-    if unique_obstacle_violations:
-        failure_reasons.append(f"obstacle_collision:{len(unique_obstacle_violations)}")
     unique_gripper_examples = tuple(dict.fromkeys(gripper_object_examples))
-    return {
-        "schema_version": 1,
-        "success": not failure_reasons,
-        "failure_reasons": failure_reasons,
+    evidence = _build_dynamics_evidence(
+        final_error=final_error,
+        position_tolerance=position_tolerance,
+        weld_frames=weld_frames,
+        max_weld_tracking_error=max_weld_tracking_error,
+        weld_tracking_tolerance=weld_tracking_tolerance,
+        obstacle_collisions=len(unique_obstacle_violations),
+        gripper_object_contacts=gripper_object_contacts,
+        gripper_object_contact_sides=tuple(sorted(gripper_object_contact_sides)),
+        gripper_object_max_penetration=gripper_object_max_penetration,
+        gripper_object_max_penetration_by_side=gripper_object_max_penetration_by_side,
+        max_gripper_penetration=max_gripper_penetration,
+        require_two_sided_grasp=require_two_sided_grasp,
+        table_contacts=table_contacts,
+        settle_steps=int(settle_steps),
+    )
+    evidence.update({
         "final_object_position": [float(item) for item in cube_position],
         "target_position": [float(item) for item in target],
         "final_error": final_error,
+        "max_weld_tracking_error": max_weld_tracking_error,
         "weld_frames": weld_frames,
         "cube_contacts": cube_contacts,
         "table_contacts": table_contacts,
@@ -248,8 +438,15 @@ def validate_physics_replay(
         "obstacle_collision_examples": list(unique_obstacle_violations[:8]),
         "grasp_contact_present": gripper_object_contacts > 0,
         "gripper_object_contacts": gripper_object_contacts,
+        "gripper_object_contact_sides": sorted(gripper_object_contact_sides),
         "gripper_object_max_penetration": gripper_object_max_penetration,
+        "gripper_object_max_penetration_by_side": {
+            side: float(value)
+            for side, value in sorted(gripper_object_max_penetration_by_side.items())
+        },
         "gripper_object_max_penetration_example": gripper_object_max_penetration_example,
         "gripper_object_contact_examples": list(unique_gripper_examples[:8]),
         "settle_steps": int(settle_steps),
-    }
+        "frame_substeps": substeps,
+    })
+    return evidence

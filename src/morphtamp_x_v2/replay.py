@@ -85,6 +85,10 @@ def build_replay_frames(
                     object_attached=attached,
                     weld_active=weld,
                     progress=float(raw),
+                    orientation_required=phase.orientation_required,
+                    orientation_tolerance=phase.orientation_tolerance,
+                    orientation_mode=phase.orientation_mode,
+                    orientation_weight=phase.orientation_weight,
                 )
             )
         previous_tcp = phase.tcp_position

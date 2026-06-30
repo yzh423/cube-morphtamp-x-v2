@@ -21,6 +21,16 @@ FIXED_TASKS = (
     "folded_transfer",
 )
 HELDOUT_TASKS = ("compound_shelf_barrier", "diagonal_reach_around", "under_bridge")
+STRESS_TASKS = (
+    "far_corner",
+    "near_to_far_reach",
+    "compound_shelf_barrier",
+    "diagonal_reach_around",
+    "under_bridge",
+    "reach_boundary_far",
+    "tight_under_bridge",
+    "high_shelf_barrier",
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,14 @@ PROTOCOLS: dict[str, BenchmarkProtocol] = {
         auto_fit_panda=False,
         description="fixed held-out stress protocol; reserve for final validation after tuning",
         evidence_role="heldout_evidence",
+    ),
+    "stress_fixed": BenchmarkProtocol(
+        name="stress_fixed",
+        objects=OBJECT_TYPES,
+        tasks=STRESS_TASKS,
+        auto_fit_panda=False,
+        description="fixed stress and failure-boundary protocol for reach, clearance, and high-placement limits",
+        evidence_role="stress_boundary_evidence",
     ),
 }
 

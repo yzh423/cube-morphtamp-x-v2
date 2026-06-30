@@ -11,6 +11,9 @@ from .pose_math import IDENTITY_QUAT, quat_angle_error, quat_error_vector
 from .tasks import make_scenario
 
 
+DEFAULT_FINGERTIP_EXTENSION = 0.024
+
+
 @dataclass(frozen=True)
 class PandaJointFrame:
     phase_name: str
@@ -61,6 +64,10 @@ class PandaIKReplay:
     eef_site: str | None
     max_position_error: float
     max_orientation_error: float
+    joint_path_length: float
+    max_joint_step: float
+    energy_proxy: float
+    smoothness_proxy: float
     frames: tuple[PandaJointFrame, ...]
     failure_reasons: tuple[str, ...]
 
@@ -72,6 +79,10 @@ class PandaIKReplay:
             "eef_site": self.eef_site,
             "max_position_error": self.max_position_error,
             "max_orientation_error": self.max_orientation_error,
+            "joint_path_length": self.joint_path_length,
+            "max_joint_step": self.max_joint_step,
+            "energy_proxy": self.energy_proxy,
+            "smoothness_proxy": self.smoothness_proxy,
             "failure_reasons": list(self.failure_reasons),
             "frames": [frame.to_json_dict() for frame in self.frames],
         }
@@ -79,6 +90,29 @@ class PandaIKReplay:
 
 def _tuple3(vector: np.ndarray) -> tuple[float, float, float]:
     return (float(vector[0]), float(vector[1]), float(vector[2]))
+
+
+def joint_motion_costs(q_sequence: tuple[tuple[float, ...], ...]) -> dict[str, float]:
+    if len(q_sequence) < 2:
+        return {
+            "joint_path_length": 0.0,
+            "max_joint_step": 0.0,
+            "energy_proxy": 0.0,
+            "smoothness_proxy": 0.0,
+        }
+    q_arrays = [np.asarray(q, dtype=float) for q in q_sequence]
+    deltas = [q_arrays[index] - q_arrays[index - 1] for index in range(1, len(q_arrays))]
+    step_norms = [float(np.linalg.norm(delta)) for delta in deltas]
+    accelerations = [
+        deltas[index] - deltas[index - 1]
+        for index in range(1, len(deltas))
+    ]
+    return {
+        "joint_path_length": float(sum(step_norms)),
+        "max_joint_step": float(max(step_norms)),
+        "energy_proxy": float(sum(float(np.dot(delta, delta)) for delta in deltas)),
+        "smoothness_proxy": float(sum(float(np.dot(accel, accel)) for accel in accelerations)),
+    }
 
 
 class MuJoCoPandaIK:
@@ -115,7 +149,7 @@ class MuJoCoPandaIK:
         self.object_qpos_address = self._detect_object_qpos_address()
         self.object_qvel_address = self._detect_object_qvel_address()
         self.mujoco.mj_forward(self.model, self.data)
-        self.fingertip_extension = 0.0
+        self.fingertip_extension = DEFAULT_FINGERTIP_EXTENSION
 
     @property
     def neutral_q(self) -> np.ndarray:
@@ -557,8 +591,34 @@ def solve_joint_replay(
     failures: list[str] = []
     max_error = 0.0
     max_orientation_error = 0.0
+    hold_attach_quat: tuple[float, float, float, float] | None = None
     for frame in frames:
-        orientation_weight = 0.35 if orientation_tolerance < 3.0 else 0.0
+        frame_orientation_required = bool(getattr(frame, "orientation_required", False))
+        frame_orientation_tolerance = float(
+            getattr(frame, "orientation_tolerance", orientation_tolerance)
+        )
+        frame_orientation_mode = str(getattr(frame, "orientation_mode", "target"))
+        frame_orientation_weight = max(float(getattr(frame, "orientation_weight", 0.0)), 0.0)
+        effective_orientation_tolerance = min(
+            float(orientation_tolerance),
+            frame_orientation_tolerance,
+        )
+        target_quat = frame.tcp_quat
+        if frame_orientation_required and frame_orientation_mode == "hold_attach":
+            target_quat = hold_attach_quat
+        elif frame_orientation_mode == "hold_attach":
+            target_quat = hold_attach_quat
+        orientation_weight = (
+            frame_orientation_weight
+            if frame_orientation_weight > 0.0 and target_quat is not None
+            else 0.35
+            if (
+                (frame_orientation_required or float(orientation_tolerance) < 3.0)
+                and effective_orientation_tolerance < 3.0
+                and target_quat is not None
+            )
+            else 0.0
+        )
         q, error, orientation_error = ik.solve(
             frame.tcp_position,
             initial_q=q,
@@ -566,7 +626,7 @@ def solve_joint_replay(
             gripper_width=frame.gripper_width,
             object_position=frame.object_position,
             object_quat=frame.object_quat,
-            target_quat=frame.tcp_quat,
+            target_quat=target_quat,
             orientation_weight=orientation_weight,
         )
         max_error = max(max_error, error)
@@ -576,10 +636,18 @@ def solve_joint_replay(
         ik.set_object_position(frame.object_position, frame.object_quat)
         tcp = ik.task_position()
         tcp_quat = ik.task_quat()
+        if (
+            frame_orientation_mode == "hold_attach"
+            and hold_attach_quat is None
+        ):
+            hold_attach_quat = tcp_quat
         collision_count = ik.collision_violation_count()
         if error > tolerance:
             failures.append(f"{frame.phase_name}:ik_error:{error:.6g}")
-        if orientation_error > orientation_tolerance:
+        if (
+            (frame_orientation_required or float(orientation_tolerance) < 3.0)
+            and orientation_error > effective_orientation_tolerance
+        ):
             failures.append(f"{frame.phase_name}:orientation_error:{orientation_error:.6g}")
         if collision_count > 0:
             failures.append(f"{frame.phase_name}:collision:{collision_count}")
@@ -604,6 +672,7 @@ def solve_joint_replay(
                 object_quat=frame.object_quat,
             )
         )
+    costs = joint_motion_costs(tuple(frame.q for frame in solved))
     return PandaIKReplay(
         success=not failures,
         joint_names=ik.joint_names,
@@ -611,6 +680,10 @@ def solve_joint_replay(
         eef_site=ik.eef_site,
         max_position_error=float(max_error),
         max_orientation_error=float(max_orientation_error),
+        joint_path_length=costs["joint_path_length"],
+        max_joint_step=costs["max_joint_step"],
+        energy_proxy=costs["energy_proxy"],
+        smoothness_proxy=costs["smoothness_proxy"],
         frames=tuple(solved),
         failure_reasons=tuple(failures),
     )

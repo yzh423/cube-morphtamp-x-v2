@@ -161,6 +161,41 @@ def _increment(counter: dict[str, int], code: str, amount: int = 1) -> None:
     counter[code] = counter.get(code, 0) + int(amount)
 
 
+def summarize_physical_evidence(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    items = list(rows)
+    rows_with_evidence = 0
+    physical_successes = 0
+    failure_reason_counts: dict[str, int] = {}
+    failed_check_counts: dict[str, int] = {}
+    for row in items:
+        evidence = row.get("physical_evidence")
+        if not isinstance(evidence, dict):
+            continue
+        rows_with_evidence += 1
+        if bool(evidence.get("success")):
+            physical_successes += 1
+        for reason in evidence.get("failure_reasons") or ():
+            _increment(failure_reason_counts, _normalize_failure_code(reason))
+        checks = evidence.get("checks")
+        if isinstance(checks, dict):
+            for name, check in checks.items():
+                if isinstance(check, dict) and check.get("passed") is False:
+                    _increment(failed_check_counts, str(name))
+    physical_failures = rows_with_evidence - physical_successes
+    return {
+        "rows": len(items),
+        "rows_with_physical_evidence": rows_with_evidence,
+        "rows_without_physical_evidence": len(items) - rows_with_evidence,
+        "physical_successes": physical_successes,
+        "physical_failures": physical_failures,
+        "physical_success_rate": 0.0
+        if rows_with_evidence == 0
+        else physical_successes / rows_with_evidence,
+        "failure_reason_counts": dict(sorted(failure_reason_counts.items())),
+        "failed_check_counts": dict(sorted(failed_check_counts.items())),
+    }
+
+
 def _row_failure_codes(row: dict[str, Any]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for reason in row.get("failure_reasons") or ():
@@ -174,6 +209,10 @@ def _row_failure_codes(row: dict[str, Any]) -> dict[str, int]:
         summary = summarize_grasp_selection(row.get("grasp_selection"))
     for code, count in dict(summary.get("rejection_code_counts") or {}).items():
         _increment(counts, f"grasp_{code}", int(count))
+    evidence = row.get("physical_evidence")
+    if isinstance(evidence, dict):
+        for reason in evidence.get("failure_reasons") or ():
+            _increment(counts, f"physical_{_normalize_failure_code(reason)}")
     return dict(sorted(counts.items()))
 
 
@@ -301,6 +340,7 @@ def summarize_benchmark(payload: dict[str, Any]) -> dict[str, Any]:
             "max_position_error": _position_error(best),
         },
         "grasp_planning": _aggregate_grasp_planning(results),
+        "physical_evidence": summarize_physical_evidence(results),
         "failure_taxonomy": _aggregate_failure_taxonomy(results),
         "failed_cases": _failed_cases(results),
         "task_splits": _task_splits_for_results(tasks),
@@ -372,6 +412,22 @@ def write_summary_markdown(summary: dict[str, Any], path: Path) -> None:
             lines += ["### Coarse rejection codes", "", "| Code | Count |", "|---|---:|"]
             for code, count in rejection_counts.items():
                 lines.append(f"| `{code}` | {count} |")
+            lines.append("")
+    physical = summary.get("physical_evidence", {})
+    if physical:
+        lines += [
+            "## Physical evidence",
+            "",
+            f"- Rows with physical evidence: {int(physical['rows_with_physical_evidence'])}",
+            f"- Physical successes: {int(physical['physical_successes'])}",
+            f"- Physical success rate: {float(physical['physical_success_rate']):.3f}",
+            "",
+        ]
+        failed_checks = dict(physical.get("failed_check_counts") or {})
+        if failed_checks:
+            lines += ["### Failed physical checks", "", "| Check | Count |", "|---|---:|"]
+            for check_name, count in failed_checks.items():
+                lines.append(f"| `{check_name}` | {count} |")
             lines.append("")
     failure = summary.get("failure_taxonomy", {})
     failure_counts = dict(failure.get("overall_code_counts") or {})

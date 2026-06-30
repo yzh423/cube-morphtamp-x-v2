@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import pytest
 
+import morphtamp_x_v2.panda_ik as panda_ik_module
+from morphtamp_x_v2.models import Phase, PickPlaceScenario
 from morphtamp_x_v2.objects import object_half_height, object_spec
-from morphtamp_x_v2.panda_ik import MuJoCoPandaIK, auto_fit_panda_scenario, solve_joint_replay
+from morphtamp_x_v2.panda_ik import (
+    DEFAULT_FINGERTIP_EXTENSION,
+    MuJoCoPandaIK,
+    auto_fit_panda_scenario,
+    solve_joint_replay,
+)
 from morphtamp_x_v2.planner import plan_pick_place
 from morphtamp_x_v2.replay import build_replay_frames
 
@@ -132,6 +139,27 @@ def test_panda_ik_uses_gripper_center_when_finger_bodies_exist(tmp_path):
     assert task[0] > hand[0]
 
 
+def test_panda_ik_task_point_is_distal_to_finger_geom_center(tmp_path):
+    pytest.importorskip("mujoco")
+    path = tmp_path / "panda.xml"
+    path.write_text(PANDA_CHAIN_WITH_FINGERS_XML, encoding="utf-8")
+
+    ik = MuJoCoPandaIK(path)
+    ik.set_q(ik.neutral_q)
+
+    finger_center = ik.data.geom_xpos[ik.gripper_geom_ids].mean(axis=0)
+    hand = ik.eef_position()
+    task = ik.task_position()
+
+    assert task[0] > finger_center[0]
+    assert (task[0] - finger_center[0]) == pytest.approx(ik.fingertip_extension)
+    assert ik.fingertip_extension > 0.0
+
+
+def test_default_fingertip_extension_matches_calibrated_grasp_clearance():
+    assert DEFAULT_FINGERTIP_EXTENSION == pytest.approx(0.024)
+
+
 def test_panda_ik_selects_geoms_from_distinct_finger_bodies(tmp_path):
     pytest.importorskip("mujoco")
     path = tmp_path / "panda.xml"
@@ -164,6 +192,9 @@ def test_solve_joint_replay_returns_q_for_each_frame(tmp_path):
     assert len(replay.frames) == len(frames)
     assert all(len(frame.q) == 7 for frame in replay.frames)
     assert replay.max_position_error < 0.20
+    assert replay.joint_path_length >= 0.0
+    assert replay.energy_proxy >= 0.0
+    assert replay.smoothness_proxy >= 0.0
 
 
 def test_joint_replay_frame_schema_contains_7d_quality_metrics(tmp_path):
@@ -212,5 +243,100 @@ def test_solve_joint_replay_reports_orientation_failures_for_6d_targets(tmp_path
     row = replay.frames[0].to_json_dict()
 
     assert "max_orientation_error" in replay.to_json_dict()
+    assert "energy_proxy" in replay.to_json_dict()
+    assert "smoothness_proxy" in replay.to_json_dict()
     assert "orientation_error" in row
     assert isinstance(row["orientation_error"], float)
+
+
+def test_solve_joint_replay_uses_frame_level_orientation_requirement(monkeypatch):
+    import numpy as np
+
+    calls = []
+    learned_quat = (0.5, 0.5, 0.5, 0.5)
+
+    class FakeIK:
+        joint_names = tuple(f"joint{i}" for i in range(1, 8))
+        eef_body = "hand"
+        eef_site = None
+        ready_q = np.zeros(7)
+
+        def __init__(self, panda_xml):
+            self.q = np.zeros(7)
+
+        def solve(self, target, **kwargs):
+            calls.append(
+                {
+                    "orientation_weight": kwargs["orientation_weight"],
+                    "target_quat": kwargs["target_quat"],
+                }
+            )
+            return np.zeros(7), 0.0, 0.0
+
+        def set_q(self, q):
+            self.q = np.asarray(q, dtype=float)
+
+        def set_gripper_width(self, width):
+            return None
+
+        def set_object_position(self, position, quat=None):
+            return None
+
+        def task_position(self):
+            return np.zeros(3)
+
+        def task_quat(self):
+            return learned_quat
+
+        def collision_violation_count(self):
+            return 0
+
+        def joint_margin(self, q):
+            return 1.0
+
+        def condition_number(self):
+            return 1.0
+
+        def min_singular_value(self):
+            return 1.0
+
+    monkeypatch.setattr(panda_ik_module, "MuJoCoPandaIK", FakeIK)
+    scenario = PickPlaceScenario()
+    frames = build_replay_frames(
+        scenario,
+        (
+            Phase("home", scenario.cube_start, 0.08, False, "home"),
+            Phase(
+                "attach",
+                scenario.cube_start,
+                0.04,
+                True,
+                "attach",
+                tcp_quat=(1.0, 0.0, 0.0, 0.0),
+                orientation_required=False,
+                orientation_weight=0.08,
+                orientation_mode="hold_attach",
+            ),
+            Phase(
+                "transport",
+                scenario.place_target,
+                0.04,
+                True,
+                "transport",
+                tcp_quat=(1.0, 0.0, 0.0, 0.0),
+                orientation_required=False,
+                orientation_weight=0.08,
+                orientation_mode="hold_attach",
+            ),
+        ),
+        transition_frames=1,
+        hold_frames=1,
+    )
+
+    solve_joint_replay("fake.xml", frames, orientation_tolerance=3.141592653589793)
+
+    assert calls
+    assert calls[1]["orientation_weight"] == 0.0
+    assert calls[1]["target_quat"] is None
+    assert calls[2]["orientation_weight"] > 0.0
+    assert calls[2]["target_quat"] == learned_quat

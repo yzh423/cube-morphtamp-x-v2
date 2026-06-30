@@ -45,6 +45,32 @@ def _weld_id(mujoco: Any, model: Any) -> int:
     return int(mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_EQUALITY, "v2_grasp_weld"))
 
 
+def _mocap_id(mujoco: Any, model: Any, body_name: str = "v2_grasp_anchor") -> int:
+    body_id = int(mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name))
+    if body_id < 0 or not hasattr(model, "body_mocapid"):
+        return -1
+    return int(model.body_mocapid[body_id])
+
+
+def _set_mocap_pose(
+    data: Any,
+    mocap_id: int,
+    *,
+    position: list[float] | tuple[float, float, float],
+    quat: list[float] | tuple[float, float, float, float] | None = None,
+) -> None:
+    if mocap_id < 0 or not hasattr(data, "mocap_pos") or not hasattr(data, "mocap_quat"):
+        return
+    if quat is None:
+        quat = [1.0, 0.0, 0.0, 0.0]
+    quat_array = np.asarray(quat, dtype=float)
+    norm = float(np.linalg.norm(quat_array))
+    if norm > 1e-12:
+        quat_array = quat_array / norm
+    data.mocap_pos[int(mocap_id)] = np.asarray(position, dtype=float)
+    data.mocap_quat[int(mocap_id)] = quat_array
+
+
 def _set_cube(
     data: Any,
     address: int,
@@ -94,6 +120,7 @@ def _apply_replay_frame(
     weld_id: int,
     *,
     enable_visual_weld: bool = True,
+    mocap_id: int = -1,
 ) -> bool:
     """Apply one deterministic visual replay frame.
 
@@ -116,6 +143,13 @@ def _apply_replay_frame(
         quat=list(frame.get("object_quat", [1.0, 0.0, 0.0, 0.0])),
     )
     weld_active = bool(frame["weld_active"])
+    if weld_active:
+        _set_mocap_pose(
+            data,
+            mocap_id,
+            position=list(frame.get("tcp_position", frame["object_position"])),
+            quat=list(frame.get("tcp_quat", frame.get("object_quat", [1.0, 0.0, 0.0, 0.0]))),
+        )
     _set_weld(data, weld_id, weld_active and enable_visual_weld)
     return weld_active
 
@@ -176,6 +210,7 @@ def launch_viewer(
     cube_addr = _cube_address(mujoco, model)
     cube_qvel = _cube_qvel_address(mujoco, model)
     weld = _weld_id(mujoco, model)
+    mocap = _mocap_id(mujoco, model)
     weld_was_active = False
     with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
         print("morphtamp-x-v2 viewer: close window to exit")
@@ -194,6 +229,7 @@ def launch_viewer(
                 cube_qvel,
                 weld,
                 enable_visual_weld=False,
+                mocap_id=mocap,
             )
             mujoco.mj_forward(model, data)
             # Visual replay is kinematic: object qpos from the replay is

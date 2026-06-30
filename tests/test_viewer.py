@@ -6,6 +6,7 @@ import pytest
 from morphtamp_x_v2.viewer import _apply_replay_frame
 from morphtamp_x_v2.viewer import _advance_frame_cursor
 from morphtamp_x_v2.viewer import _frame_delay
+from morphtamp_x_v2.viewer import _set_mocap_pose
 
 
 class FakeData:
@@ -13,6 +14,8 @@ class FakeData:
         self.qpos = np.zeros(16, dtype=float)
         self.qvel = np.ones(16, dtype=float)
         self.eq_active = np.zeros(1, dtype=int)
+        self.mocap_pos = np.zeros((1, 3), dtype=float)
+        self.mocap_quat = np.zeros((1, 4), dtype=float)
 
 
 def test_apply_replay_frame_updates_cube_pose_while_weld_is_active():
@@ -72,6 +75,20 @@ def test_apply_replay_frame_can_keep_visual_weld_disabled_during_kinematic_playb
     assert semantic_weld is True
     assert data.qpos[5:8] == pytest.approx(frame["object_position"])
     assert data.eq_active[0] == 0
+
+
+def test_set_mocap_pose_updates_invisible_grasp_anchor():
+    data = FakeData()
+
+    _set_mocap_pose(
+        data,
+        0,
+        position=[0.4, -0.2, 0.5],
+        quat=[0.5, 0.5, 0.5, 0.5],
+    )
+
+    assert data.mocap_pos[0] == pytest.approx([0.4, -0.2, 0.5])
+    assert data.mocap_quat[0] == pytest.approx([0.5, 0.5, 0.5, 0.5])
 
 
 def test_frame_delay_supports_uncapped_playback():

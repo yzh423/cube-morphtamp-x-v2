@@ -5,6 +5,8 @@ import numpy as np
 from .grasp_strategies import GraspStrategy, strategy_for_object
 from .models import Phase, PickPlaceScenario
 
+OBSTACLE_OBJECT_CLEARANCE = 0.20
+
 
 def _add(
     point: tuple[float, float, float],
@@ -12,6 +14,16 @@ def _add(
 ) -> tuple[float, float, float]:
     value = np.asarray(point, dtype=float) + np.asarray(delta, dtype=float)
     return (float(value[0]), float(value[1]), float(value[2]))
+
+
+def _object_vertical_radius(scenario: PickPlaceScenario) -> float:
+    if scenario.object_geom_type == "box":
+        return float(scenario.object_size[2])
+    if scenario.object_geom_type == "sphere":
+        return float(scenario.object_size[0])
+    if scenario.object_geom_type in {"cylinder", "capsule"}:
+        return float(scenario.object_size[1])
+    return float(scenario.cube_size) * 0.5
 
 
 def plan_pick_place(
@@ -42,6 +54,23 @@ def plan_pick_place(
         *,
         uses_grasp_strategy: bool = False,
     ) -> Phase:
+        obstacle_orientation_hold = False
+        orientation_required = bool(strategy.requires_orientation)
+        orientation_tolerance = (
+            float(strategy.orientation_tolerance)
+            if strategy.requires_orientation
+            else 3.141592653589793
+        )
+        orientation_mode = (
+            "target"
+            if strategy.requires_orientation
+            else ("hold_attach" if obstacle_orientation_hold else "target")
+        )
+        orientation_weight = (
+            float(strategy.orientation_weight)
+            if strategy.requires_orientation
+            else 0.0
+        )
         return Phase(
             name,
             tcp_position,
@@ -51,8 +80,10 @@ def plan_pick_place(
             strategy.name if uses_grasp_strategy else None,
             strategy.approach_axis if uses_grasp_strategy else None,
             strategy.tcp_quat if uses_grasp_strategy else (1.0, 0.0, 0.0, 0.0),
-            bool(strategy.requires_orientation) if uses_grasp_strategy else False,
-            float(strategy.orientation_tolerance) if uses_grasp_strategy else 3.141592653589793,
+            orientation_required if uses_grasp_strategy else False,
+            orientation_tolerance if uses_grasp_strategy else 3.141592653589793,
+            orientation_mode if uses_grasp_strategy else "target",
+            orientation_weight if uses_grasp_strategy else 0.0,
         )
 
     def tcp_for_object(point: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -64,9 +95,13 @@ def plan_pick_place(
     base_transfer_z = max(start[2], target[2]) + scenario.lift_height
     if scenario.obstacle_center is not None and scenario.obstacle_size is not None:
         obstacle_top = float(scenario.obstacle_center[2] + scenario.obstacle_size[2])
-        # TCP is the pinch center, not the lowest point of the hand. Keep a
-        # conservative wrist / gripper clearance over physical barriers.
-        base_transfer_z = max(base_transfer_z, obstacle_top + 0.26)
+        # base_transfer_z is the carried object center. Clear physical
+        # barriers by the object half-height plus a conservative free-space
+        # margin, without over-lifting the Panda into awkward wrist postures.
+        base_transfer_z = max(
+            base_transfer_z,
+            obstacle_top + _object_vertical_radius(scenario) + OBSTACLE_OBJECT_CLEARANCE,
+        )
     home_z = base_transfer_z + grasp_offset[2] + 0.12
     home = (float(midpoint[0]), float(midpoint[1]), float(home_z))
     lift = tcp_for_object((float(start[0]), float(start[1]), float(base_transfer_z)))

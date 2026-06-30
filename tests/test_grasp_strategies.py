@@ -30,7 +30,9 @@ def test_objects_expose_multiple_candidate_grasp_strategies(object_type):
 
 def test_planner_can_generate_different_paths_for_explicit_grasp_candidates():
     scenario = make_scenario(object_type="cube", task_name="tabletop_easy")
-    center, top = strategies_for_object("cube")[:2]
+    strategies = strategies_for_object("cube")
+    center = next(strategy for strategy in strategies if strategy.name == "box_side_pinch")
+    top = next(strategy for strategy in strategies if strategy.name == "box_top_center_pinch")
 
     center_phases = {phase.name: phase for phase in plan_pick_place(scenario, grasp_strategy=center)}
     top_phases = {phase.name: phase for phase in plan_pick_place(scenario, grasp_strategy=top)}
@@ -38,6 +40,13 @@ def test_planner_can_generate_different_paths_for_explicit_grasp_candidates():
     assert center_phases["grasp"].tcp_position == pytest.approx(scenario.cube_start)
     assert top_phases["grasp"].tcp_position != pytest.approx(center_phases["grasp"].tcp_position)
     assert top_phases["grasp"].grasp_strategy == top.name
+
+
+def test_cube_exposes_lateral_calibration_grasp_candidates():
+    strategies = {strategy.name: strategy for strategy in strategies_for_object("cube")}
+
+    assert strategies["box_side_pinch_y_neg"].tcp_offset == pytest.approx((0.0, -0.004, 0.0))
+    assert strategies["box_side_pinch_y_pos"].tcp_offset == pytest.approx((0.0, 0.004, 0.0))
 
 
 def test_orientation_required_strategy_is_written_to_grasp_phases():

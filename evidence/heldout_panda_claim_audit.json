@@ -1,0 +1,121 @@
+{
+  "claims": [
+    {
+      "caveat": "This checks search execution, not global optimality.",
+      "claim": "The morphology optimizer evaluated a non-trivial candidate set.",
+      "claim_id": "optimization_search",
+      "evidence_path": "optimization.total_candidates",
+      "observed": 375,
+      "relation": ">=",
+      "supported": true,
+      "threshold": 1
+    },
+    {
+      "caveat": "Feasibility is defined by the implemented simulation constraints.",
+      "claim": "The search found at least one feasible morphology design.",
+      "claim_id": "feasible_design_found",
+      "evidence_path": "optimization.feasible_candidates",
+      "observed": 234,
+      "relation": ">",
+      "supported": true,
+      "threshold": 0
+    },
+    {
+      "caveat": "Selection depends on the configured cost and constraint model.",
+      "claim": "A best morphology design is explicitly selected.",
+      "claim_id": "best_design_selected",
+      "evidence_path": "optimization.best_design",
+      "observed": "opt_u0.900_f0.900_w0.820_bx0.000",
+      "relation": "exists",
+      "supported": true,
+      "threshold": null
+    },
+    {
+      "caveat": "Held-out success is bounded to the encoded object/task protocol.",
+      "claim": "The selected design preserves full held-out task success.",
+      "claim_id": "heldout_success",
+      "evidence_path": "optimization.best_success_rate",
+      "observed": 1.0,
+      "relation": ">=",
+      "supported": true,
+      "threshold": 1.0
+    },
+    {
+      "caveat": "Reach margin is an equivalent morphology proxy, not hardware clearance.",
+      "claim": "The selected design satisfies the required robust reach margin.",
+      "claim_id": "reach_margin",
+      "evidence_path": "optimization.best_minimum_reach_margin",
+      "observed": 0.05114549621108844,
+      "relation": ">=",
+      "supported": true,
+      "threshold": 0.05
+    },
+    {
+      "caveat": "The metric is computed on Panda replay states in simulation.",
+      "claim": "The selected design satisfies the minimum Jacobian singular-value threshold.",
+      "claim_id": "singularity_margin",
+      "evidence_path": "optimization.best_minimum_sigma",
+      "observed": 0.2405079904507164,
+      "relation": ">=",
+      "supported": true,
+      "threshold": 0.08
+    },
+    {
+      "caveat": "Condition number is a kinematic quality metric, not a force guarantee.",
+      "claim": "The selected design satisfies the maximum Jacobian condition-number threshold.",
+      "claim_id": "condition_number",
+      "evidence_path": "optimization.best_maximum_condition_number",
+      "observed": 4.096159158473751,
+      "relation": "<=",
+      "supported": true,
+      "threshold": 30.0
+    },
+    {
+      "caveat": "The count should be interpreted with the listed perturbation settings.",
+      "claim": "A non-empty robustness benchmark was executed.",
+      "claim_id": "robustness_runs",
+      "evidence_path": "robustness.total_runs",
+      "observed": 150,
+      "relation": ">=",
+      "supported": true,
+      "threshold": 150
+    },
+    {
+      "caveat": "This does not imply unbounded robustness outside the perturbation radius.",
+      "claim": "The final robustness benchmark has no failed runs.",
+      "claim_id": "robustness_success",
+      "evidence_path": "robustness.success_rate",
+      "observed": 1.0,
+      "relation": ">=",
+      "supported": true,
+      "threshold": 1.0
+    },
+    {
+      "caveat": "Only failures recorded by the current evaluator are counted.",
+      "claim": "Failure analysis reports zero failed robustness entries.",
+      "claim_id": "failure_free_summary",
+      "evidence_path": "failure_analysis.failed_runs",
+      "observed": 0,
+      "relation": "equals",
+      "supported": true,
+      "threshold": 0
+    },
+    {
+      "caveat": "No hardware, force-closure, tactile, actuator-torque, or sim-to-real evidence is present; this remains a simulation claim.",
+      "claim": "The results prove real-world hardware or manufacturable Panda redesign performance.",
+      "claim_id": "hardware_transfer",
+      "evidence_path": "unsupported.hardware_transfer",
+      "observed": null,
+      "relation": "truthy",
+      "supported": false,
+      "threshold": true
+    }
+  ],
+  "overall": {
+    "claims": 11,
+    "research_claim_safe": true,
+    "supported_claims": 10,
+    "unsupported_claims": 1
+  },
+  "schema_version": 1
+}

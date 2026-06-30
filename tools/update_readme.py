@@ -70,21 +70,29 @@ def _cli_command_table() -> str:
         "list-objects": "print available object types",
         "list-tasks": "print available task types",
         "check-tasks": "validate object/task library geometry",
+        "claim-audit": "map final report claims to concrete evidence fields",
         "plan": "generate symbolic pick-place phases",
         "build-scene": "write a MuJoCo Panda/object/task scene XML",
         "run": "select a grasp, build scene, solve Panda replay, and write replay JSON",
         "view": "open or report a generated replay",
         "browse": "interactive object/task switching viewer",
         "validate-physics": "run replay-level physics validation",
+        "validate-dynamics": "run MuJoCo equality-weld replay dynamics validation",
+        "validate-task-physics": "check geometric grasp/support/clearance evidence from replay JSON",
         "benchmark": "evaluate object/task combinations",
+        "dynamics-benchmark": "batch MuJoCo dynamics validation with gate presets and resume cache",
+        "stress-benchmark": "run the fixed stress / failure-boundary protocol",
         "compare-grasps": "rank grasp candidates and generate per-candidate replays",
         "browse-candidates": "interactive switching viewer for grasp candidates",
         "analyze-benchmark": "summarize benchmark JSON to JSON/CSV/Markdown",
+        "analyze-dynamics-benchmark": "summarize strict MuJoCo dynamics benchmark evidence",
         "morphology-benchmark": "evaluate morphology designs over object/task cases",
         "optimize-morphology": "search continuous morphology scales for lowest feasible cost",
         "robustness-benchmark": "evaluate seed/pose perturbation robustness",
+        "robocasa-snapshot": "extract optional RoboCasa scene semantics into local task evidence",
         "failure-analysis": "summarize failed cases by design, object, task, and reason",
         "design-analysis": "generate Pareto, segment-importance, and recommendation reports",
+        "ablation-report": "summarize method ablations and failure-boundary evidence",
         "visualize-results": "generate benchmark and morphology figures",
     }
     rows = [
@@ -109,6 +117,23 @@ and visual replay.
 The project is intentionally separate from the older `reachability_morphology_lab`
 prototype. Treat this folder as the current baseline.
 
+## Research goal
+
+This repository studies a compact question: **given a manipulation workload, what
+is the least-cost arm morphology that still reaches, grasps, avoids obstacles,
+and remains numerically well conditioned?**
+
+The current implementation does not claim to manufacture a new Panda arm. The
+arm-design variables are equivalent morphology proxies: upper-arm scale,
+forearm scale, wrist scale, and optional base shift. They are used to compare
+reach-length, mass/energy proxies, reach margin, path length, singularity
+metrics, and task success under a shared MuJoCo/Franka Panda evaluation loop.
+
+The project is inspired by task-driven morphology / hand-motion optimization
+ideas, but adapts them to a 7-DoF robot arm setting: object-specific grasp
+strategies, task-and-motion-style phase plans, Panda IK/Jacobian evidence,
+and simulation-stage physical checks.
+
 ## What this project does
 
 The closed loop is:
@@ -116,15 +141,51 @@ The closed loop is:
 1. choose an object and task scene;
 2. generate multiple grasp candidates for that object;
 3. score candidates using IK error, orientation error, joint margin, collision,
-   7D joint path length, max joint step, and condition number;
+   7D joint path length, max joint step, condition number, energy proxy, and
+   smoothness proxy;
 4. replay the selected plan with a real 7-DOF Franka/Panda MuJoCo model;
-5. optionally compare all grasp candidates in a report and switch between their
+5. score replay-level physical evidence for object retention, support validity,
+   and obstacle clearance using conservative geometric checks;
+6. optionally validate MuJoCo equality-weld replay dynamics, gripper penetration,
+   and strict two-sided finger contact;
+7. optionally compare all grasp candidates in a report and switch between their
    individual replays;
-6. run object-task and morphology benchmarks for cost / reachability tradeoffs.
+8. run object-task and morphology benchmarks for cost / reachability tradeoffs.
 
 Evidence scope: this is a research prototype for reachability, kinematic
 feasibility, grasp-candidate selection, collision-aware replay, and morphology
 cost comparison. It is not yet a full force-controlled contact manipulation stack.
+
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `src/morphtamp_x_v2/` | core object/task library, grasp planner, Panda IK bridge, replay builder, validators, benchmarks |
+| `tests/` | regression tests for planning, grasp selection, physics evidence, RoboCasa bridge, CLI behavior, and reports |
+| `tools/` | README generation, screenshot rendering, and debugging helpers |
+| `docs/` | implementation notes, result chapters, claim audits, and report-ready Markdown artifacts |
+| `evidence/` | compact tracked evidence JSON used by reports and audits |
+| `examples/` | offline examples, including RoboCasa semantic mapping inputs |
+| `results/` | local generated outputs; ignored by Git and regenerated from CLI commands |
+| `.codex/` | local agent/research-state notes; intentionally private and not uploaded to GitHub |
+
+## Install and setup
+
+The project is plain Python. It is normally run from the WSL `robocasa`
+environment you already use for RoboCasa / robosuite / MuJoCo:
+
+```bash
+git clone https://github.com/yzh423/cube-morphtamp-x-v2.git
+cd cube-morphtamp-x-v2
+
+conda activate robocasa
+export PYTHONPATH=src:tools
+```
+
+Minimal dependencies for unit tests are Python 3.10+, `numpy`, and `pytest`.
+Panda replay, dynamics validation, and visualization additionally require the
+MuJoCo Python package and a Franka/Panda MuJoCo XML. RoboCasa integration is
+optional and only needed for `robocasa-snapshot`.
 
 ## Simulation snapshots
 
@@ -139,7 +200,7 @@ model and object-specific grasp planning. Regenerate them with
 
 ## Environment
 
-From WSL:
+From the local WSL project folder:
 
 ```bash
 cd ~/robocasa/cube_morphtamp_x_v2
@@ -158,6 +219,9 @@ If you open an interactive viewer, use:
 ```bash
 MUJOCO_GL=glfw
 ```
+
+For headless RoboCasa snapshot extraction or MuJoCo offscreen runs, `MUJOCO_GL=egl`
+is often preferable.
 
 ## Keep this README updated
 
@@ -182,6 +246,9 @@ python -m morphtamp_x_v2.cli list-objects
 python -m morphtamp_x_v2.cli list-tasks
 python -m morphtamp_x_v2.cli check-tasks
 ```
+
+Expected state for this release candidate: the full test suite should pass on
+both Windows and WSL when `PYTHONPATH=src:tools` is set.
 
 ## CLI command reference
 
@@ -212,6 +279,74 @@ MUJOCO_GL=glfw python -m morphtamp_x_v2.cli view \\
   --fps 60 \\
   --playback-speed 0.55
 ```
+
+Validate replay-level physical evidence:
+
+```bash
+python -m morphtamp_x_v2.cli validate-task-physics \\
+  --replay results/cube_over_barrier_current/replay.json \\
+  --output results/cube_over_barrier_current/physics_evidence.json
+```
+
+This report is intentionally conservative in wording: it validates geometric
+replay consistency, including object retention while attached, final support,
+endpoint support references, and obstacle clearance. It is not a replacement for
+force-controlled contact dynamics or hardware grasp validation.
+
+Validate MuJoCo equality-weld dynamics for the same replay:
+
+```bash
+python -m morphtamp_x_v2.cli validate-dynamics \\
+  --xml results/cube_over_barrier_current/scene.xml \\
+  --replay results/cube_over_barrier_current/replay.json \\
+  --settle-steps 80 \\
+  --frame-substeps 8 \\
+  --position-tolerance 0.05 \\
+  --dynamics-gate panda_practical_8mm \\
+  --output results/cube_over_barrier_current/dynamics_evidence.json
+```
+
+### Dynamics gate presets
+
+The dynamics layer has named gate presets so reports do not rely on ad-hoc
+thresholds:
+
+| Gate | Meaning | Typical use |
+|---|---|---|
+| `custom` | use the explicit CLI flags you pass | debugging one threshold at a time |
+| `ultra_strict_4mm` | two-sided finger contact and <= 4 mm gripper-object penetration | diagnostic stress test; exposes mesh/contact artifacts |
+| `panda_practical_8mm` | two-sided finger contact and <= 8 mm gripper-object penetration | practical Menagerie Panda evidence gate used for current dynamics runs |
+
+For stricter grasp evidence, require both Panda fingers to contact the object.
+In `dynamics-benchmark`, strict/practical modes evaluate up to
+`--full-candidate-limit` object-specific grasp strategies and select by dynamics
+quality: successful replays first, then two-sided contact, fewer failure
+reasons, lower palm/hand penetration risk, lower maximum gripper-object
+penetration, and lower final placement error.
+
+Use `--results-cache` for long dynamics runs. The cache writes after each
+object-task row, so a timeout can be resumed by running the same command again:
+
+```bash
+python -m morphtamp_x_v2.cli dynamics-benchmark \\
+  --objects cube sphere \\
+  --tasks tabletop_easy over_barrier \\
+  --panda-xml {PANDA_XML} \\
+  --auto-fit-panda \\
+  --position-tolerance 0.05 \\
+  --full-candidate-limit 5 \\
+  --settle-steps 20 \\
+  --frame-substeps 2 \\
+  --dynamics-gate panda_practical_8mm \\
+  --results-cache results/practical_gate_core_dynamics_cache.json \\
+  --output-dir results/practical_gate_core_dynamics_candidates \\
+  --output results/practical_gate_core_dynamics.json
+```
+
+The current core practical-gate smoke evidence completed `4/4` for
+cube/sphere x tabletop/over-barrier with two-sided contacts and maximum
+gripper-object penetration below 8 mm. Treat this as simulation-stage evidence,
+not hardware proof.
 
 ## Compare grasp candidates
 
@@ -289,6 +424,7 @@ python -m morphtamp_x_v2.cli benchmark \\
   --auto-fit-panda \\
   --position-tolerance 0.05 \\
   --full-candidate-limit 2 \\
+  --results-cache results/current_object_task_benchmark_cache.json \\
   --output results/current_object_task_benchmark.json
 
 python -m morphtamp_x_v2.cli analyze-benchmark \\
@@ -305,6 +441,29 @@ The benchmark summary includes:
 - `task_splits`: development, main, heldout, and unassigned task groups.
 
 Use held-out tasks only after tuning decisions are frozen.
+
+## Stress / failure-boundary benchmark
+
+Use this after the normal fixed protocol passes. It runs the more difficult
+stress task split, including far reach, tight bridge, compound obstacle, and
+high-shelf barrier cases. This is the quickest way to check whether a claimed
+low-cost morphology is only working because the task set is too easy:
+
+```bash
+python -m morphtamp_x_v2.cli stress-benchmark \\
+  --objects cube sphere cylinder plate mug_proxy bowl_proxy \\
+  --panda-xml {PANDA_XML} \\
+  --auto-fit-panda \\
+  --position-tolerance 0.05 \\
+  --full-candidate-limit 2 \\
+  --results-cache results/current_stress_benchmark_cache.json \\
+  --output results/current_stress_benchmark.json
+```
+
+Use `--results-cache` for Panda-aware benchmark and stress runs. These commands
+can be slow because every object-task row may trigger multi-candidate Panda IK;
+the cache writes after each completed row, so a timeout does not discard all
+progress.
 
 ## Morphology benchmark
 
@@ -382,6 +541,77 @@ The robustness JSON now contains a report-ready `summary` block with:
 - mean path length;
 - by-object and by-task success tables.
 
+## Claim audit
+
+Use the claim audit before writing or revising a report. It maps each bounded
+research claim to a concrete evidence field and marks unsupported claims, such
+as real-hardware transfer, separately from simulation-supported claims:
+
+```bash
+python -m morphtamp_x_v2.cli claim-audit \\
+  --input evidence/heldout_panda_final_summary.json \\
+  --output-json evidence/heldout_panda_claim_audit.json \\
+  --output-md docs/results/heldout_panda_claim_audit.md
+```
+
+## Ablation report
+
+Use this to turn the final summary, morphology benchmark, and benchmark summary
+into a compact method-ablation section. It checks whether reach-margin,
+singularity constraints, multi-grasp selection, and short-arm failure-boundary
+evidence are actually present:
+
+```bash
+python -m morphtamp_x_v2.cli ablation-report \\
+  --final-summary evidence/heldout_panda_final_summary.json \\
+  --morphology evidence/morphology_benchmark_after_slot_fix_margin003.json \\
+  --benchmark-summary evidence/fresh_benchmark_summary_after_slot_fix.json \\
+  --output-json evidence/heldout_panda_ablation_report.json \\
+  --output-md docs/results/heldout_panda_ablation_report.md
+```
+
+## Optional RoboCasa semantic bridge
+
+The clean v2 benchmark remains MuJoCo/Panda-first, but it now includes an
+optional RoboCasa bridge. In the WSL `robocasa` environment, this command opens
+a RoboCasa episode, extracts semantic object / fixture positions, maps the
+episode to the closest local MorphTAMP-X object-task template, and writes both
+the live snapshot and projected scenario:
+
+```bash
+MUJOCO_GL=egl python -m morphtamp_x_v2.cli robocasa-snapshot \\
+  --env-name PickPlaceCoffee \\
+  --robot PandaOmron \\
+  --behavior machine_to_counter \\
+  --seed 42 \\
+  --output-json results/robocasa/coffee_snapshot.json \\
+  --output-scenario results/robocasa/coffee_projected_scenario.json
+```
+
+Scope note: this is a semantic bridge from RoboCasa to the local MuJoCo/Panda
+evaluation loop. It strengthens RoboCasa grounding, but it is not yet full
+RoboCasa contact-rich task execution or policy learning.
+
+For CI or Windows development without live RoboCasa imports, use the included
+offline mapping example:
+
+```bash
+python -m morphtamp_x_v2.cli robocasa-snapshot \\
+  --from-json examples/robocasa_pickplacecoffee_mapping.json \\
+  --output-json results/robocasa/offline_coffee_snapshot.json \\
+  --output-scenario results/robocasa/offline_coffee_projected_scenario.json
+```
+
+Run a projected RoboCasa scenario through the local Panda replay loop:
+
+```bash
+python -m morphtamp_x_v2.cli run \\
+  --scenario-json results/robocasa/offline_coffee_projected_scenario.json \\
+  --panda-xml {PANDA_XML} \\
+  --position-tolerance 0.05 \\
+  --output-dir results/robocasa/offline_coffee_replay
+```
+
 ## Failure analysis
 
 Turn any benchmark-like JSON containing a `results` list into a compact failure
@@ -436,6 +666,30 @@ root result directory with an anchored rule such as `/results/`; do not use a
 bare `results/` exclude, because that can also skip tracked documentation paths
 like `docs/results/`.
 
+## GitHub packaging policy
+
+The GitHub repository is intended to contain the runnable method, tests, compact
+evidence, examples, and documentation. It should not contain local agent state
+or heavyweight generated experiment folders.
+
+Tracked:
+
+- `src/`, `tests/`, `tools/`
+- `README.md`, `REPRODUCIBILITY.md`
+- `docs/`, including report-ready Markdown
+- `evidence/`, compact JSON summaries used by claim/audit reports
+- `examples/`, small offline inputs
+
+Ignored / private:
+
+- `.codex/` and `.agents/`
+- `results/`, `outputs/`, `runs/`
+- Python caches and local virtual environments
+
+If you generate new raw results that are important for a paper, promote only the
+compact summary JSON/Markdown into `evidence/` or `docs/results/`, and leave the
+large raw replay directories under ignored `results/`.
+
 ## Object library
 
 {_object_table()}
@@ -464,6 +718,10 @@ like `docs/results/`.
 - If figures look empty, regenerate fresh benchmark JSON with the current code and
   check `data_quality.warnings`.
 - If README is stale, run `python tools/update_readme.py`.
+- If a long dynamics benchmark times out, rerun the exact same command with the
+  same `--results-cache` path; completed rows will be reused.
+- If Git tries to include `.codex/` or `results/`, check `.gitignore` and remove
+  them from the index with `git rm --cached`.
 """
 
 

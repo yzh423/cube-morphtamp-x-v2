@@ -32,10 +32,12 @@ class CandidateEvaluation:
     max_orientation_error: float = 0.0
     joint_path_length: float = 0.0
     max_joint_step: float = 0.0
+    energy_proxy: float = 0.0
+    smoothness_proxy: float = 0.0
     max_condition_number: float | None = None
     min_sigma: float | None = None
 
-    def score_key(self) -> tuple[int, int, float, float, int, float, float, float, float, float, float]:
+    def score_key(self) -> tuple[int, int, float, float, int, float, float, float, float, float, float, float]:
         residual = float(self.max_position_error)
         residual_for_ranking = 0.0 if residual <= 1e-4 else residual
         orientation_error = float(self.max_orientation_error)
@@ -61,6 +63,7 @@ class CandidateEvaluation:
             condition,
             float(self.joint_path_length),
             float(self.max_joint_step),
+            float(self.energy_proxy),
             float(self.path_length),
         )
 
@@ -75,6 +78,8 @@ class CandidateEvaluation:
             "path_length": self.path_length,
             "joint_path_length": self.joint_path_length,
             "max_joint_step": self.max_joint_step,
+            "energy_proxy": self.energy_proxy,
+            "smoothness_proxy": self.smoothness_proxy,
             "max_condition_number": None
             if self.max_condition_number is None
             else _json_number(float(self.max_condition_number)),
@@ -127,7 +132,7 @@ def joint_motion_metrics(q_sequence: tuple[tuple[float, ...], ...]) -> tuple[flo
     return float(total), float(max_step)
 
 
-def replay_joint_motion_metrics(replay) -> tuple[float, float, float | None, float | None]:
+def replay_joint_motion_metrics(replay) -> tuple[float, float, float | None, float | None, float, float]:
     joint_path, max_step = joint_motion_metrics(tuple(frame.q for frame in replay.frames))
     finite_conditions = [
         float(frame.condition_number)
@@ -142,7 +147,7 @@ def replay_joint_motion_metrics(replay) -> tuple[float, float, float | None, flo
         and math.isfinite(float(frame.min_singular_value))
     ]
     min_sigma = min(finite_sigmas) if finite_sigmas else None
-    return joint_path, max_step, max_condition, min_sigma
+    return joint_path, max_step, max_condition, min_sigma, float(replay.energy_proxy), float(replay.smoothness_proxy)
 
 
 def build_coarse_replay_frames(
@@ -213,7 +218,7 @@ def _evaluate_panda_candidate(
     collision_count = sum(int(frame.collision_count) for frame in replay.frames)
     margins = [float(frame.joint_margin) for frame in replay.frames if math.isfinite(float(frame.joint_margin))]
     min_margin = min(margins) if margins else 0.0
-    joint_path, max_step, max_condition, min_sigma = replay_joint_motion_metrics(replay)
+    joint_path, max_step, max_condition, min_sigma, energy_proxy, smoothness_proxy = replay_joint_motion_metrics(replay)
     success = bool(replay.success and collision_count == 0)
     return (
         CandidateEvaluation(
@@ -227,6 +232,8 @@ def _evaluate_panda_candidate(
             max_orientation_error=float(replay.max_orientation_error),
             joint_path_length=joint_path,
             max_joint_step=max_step,
+            energy_proxy=energy_proxy,
+            smoothness_proxy=smoothness_proxy,
             max_condition_number=max_condition,
             min_sigma=min_sigma,
         ),
@@ -258,7 +265,7 @@ def _evaluate_coarse_panda_candidate(
     collision_count = sum(int(frame.collision_count) for frame in replay.frames)
     margins = [float(frame.joint_margin) for frame in replay.frames if math.isfinite(float(frame.joint_margin))]
     min_margin = min(margins) if margins else 0.0
-    joint_path, max_step, max_condition, min_sigma = replay_joint_motion_metrics(replay)
+    joint_path, max_step, max_condition, min_sigma, energy_proxy, smoothness_proxy = replay_joint_motion_metrics(replay)
     success = bool(replay.success and collision_count == 0)
     return (
         CandidateEvaluation(
@@ -272,6 +279,8 @@ def _evaluate_coarse_panda_candidate(
             max_orientation_error=float(replay.max_orientation_error),
             joint_path_length=joint_path,
             max_joint_step=max_step,
+            energy_proxy=energy_proxy,
+            smoothness_proxy=smoothness_proxy,
             max_condition_number=max_condition,
             min_sigma=min_sigma,
         ),

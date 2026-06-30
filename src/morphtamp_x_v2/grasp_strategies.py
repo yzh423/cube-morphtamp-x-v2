@@ -48,6 +48,20 @@ _STRATEGY_CANDIDATES: dict[str, tuple[GraspStrategy, ...]] = {
             hold_orientation="upright",
             description="alternate side pinch across the x axis",
         ),
+        GraspStrategy(
+            name="box_side_pinch_y_neg",
+            approach_axis="side_y",
+            tcp_offset=(0.0, -0.004, 0.0),
+            hold_orientation="upright",
+            description="side pinch with negative-y millimeter TCP calibration candidate",
+        ),
+        GraspStrategy(
+            name="box_side_pinch_y_pos",
+            approach_axis="side_y",
+            tcp_offset=(0.0, 0.004, 0.0),
+            hold_orientation="upright",
+            description="side pinch with positive-y millimeter TCP calibration candidate",
+        ),
     ),
     "tall_box": (
         GraspStrategy(

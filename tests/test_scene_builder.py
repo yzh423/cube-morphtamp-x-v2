@@ -36,11 +36,43 @@ def test_build_pick_place_scene_contains_table_cube_target_and_weld(tmp_path):
     assert "v2_cube" in names
     assert "v2_cube_freejoint" in names
     assert "v2_place_target" in names
+    assert "v2_grasp_anchor" in names
+    anchor = next(item for item in root.iter("body") if item.attrib.get("name") == "v2_grasp_anchor")
+    assert anchor.attrib["mocap"] == "true"
     assert "v2_grasp_weld" in names
     weld = next(item for item in root.iter("weld") if item.attrib.get("name") == "v2_grasp_weld")
-    assert weld.attrib["body1"] == "panda_hand"
+    assert weld.attrib["body1"] == "v2_grasp_anchor"
     assert weld.attrib["body2"] == "v2_cube"
     assert weld.attrib["active"] == "false"
+
+
+def test_build_pick_place_scene_uses_tcp_mocap_anchor_instead_of_robot_body_for_weld(tmp_path):
+    panda = tmp_path / "panda.xml"
+    panda.write_text(
+        """
+<mujoco model="panda_like">
+  <worldbody>
+    <body name="link7">
+      <body name="hand">
+        <body name="attachment"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>
+""",
+        encoding="utf-8",
+    )
+    output = tmp_path / "scene.xml"
+
+    build_pick_place_scene(
+        panda_xml=panda,
+        scenario=PickPlaceScenario(),
+        output_xml=output,
+    )
+
+    root = ET.parse(output).getroot()
+    weld = next(item for item in root.iter("weld") if item.attrib.get("name") == "v2_grasp_weld")
+    assert weld.attrib["body1"] == "v2_grasp_anchor"
 
 
 def test_build_pick_place_scene_cube_has_stable_contact_parameters(tmp_path):

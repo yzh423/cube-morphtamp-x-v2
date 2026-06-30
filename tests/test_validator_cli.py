@@ -135,6 +135,37 @@ def test_cli_accepts_physics_validation_options():
     assert str(parsed.output) == "physics.json"
 
 
+def test_cli_accepts_dynamics_validation_alias_and_weld_tracking_tolerance():
+    parsed = parser().parse_args(
+        [
+            "validate-dynamics",
+            "--xml",
+            "scene.xml",
+            "--replay",
+            "replay.json",
+            "--weld-tracking-tolerance",
+            "0.02",
+            "--frame-substeps",
+            "8",
+            "--dynamics-gate",
+            "panda_practical_8mm",
+            "--max-gripper-penetration",
+            "0.004",
+            "--require-two-sided-grasp",
+            "--output",
+            "dynamics.json",
+        ]
+    )
+
+    assert parsed.command == "validate-dynamics"
+    assert parsed.weld_tracking_tolerance == 0.02
+    assert parsed.frame_substeps == 8
+    assert parsed.dynamics_gate == "panda_practical_8mm"
+    assert parsed.max_gripper_penetration == 0.004
+    assert parsed.require_two_sided_grasp is True
+    assert str(parsed.output) == "dynamics.json"
+
+
 def test_cli_view_reports_joint_replay_metadata(tmp_path, capsys):
     scene = tmp_path / "scene.xml"
     replay = tmp_path / "replay.json"
